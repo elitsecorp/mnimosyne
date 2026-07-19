@@ -5,7 +5,10 @@ dist/
 build/
 .env
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 .pytest_cache/
 .mypy_cache/
 .venv/
+debug_*.py
