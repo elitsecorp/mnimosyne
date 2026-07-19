@@ -34,6 +34,8 @@ from mnemosyne.schemas import (
     SearchRequest,
     SearchResponse,
     SearchResult,
+    SessionCreate,
+    SessionOut,
     StatsResponse,
 )
 
@@ -93,13 +95,142 @@ def health() -> HealthResponse:
     return HealthResponse()
 
 
+@app.post("/api/sessions", response_model=SessionOut)
+def create_session(req: SessionCreate):
+    """Create a new chat session."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.models import ChatSession
+    db = get_session_factory()()
+    try:
+        session = ChatSession(title=req.title)
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        return SessionOut(
+            id=session.id,
+            title=session.title,
+            created_at=str(session.created_at),
+            updated_at=str(session.updated_at),
+            message_count=0,
+        )
+    finally:
+        db.close()
+
+
+@app.get("/api/sessions", response_model=list[SessionOut])
+def list_sessions():
+    """List all chat sessions."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.models import ChatSession, Message
+    from sqlalchemy import func
+    db = get_session_factory()()
+    try:
+        sessions = db.query(ChatSession).order_by(ChatSession.updated_at.desc()).all()
+        result = []
+        for s in sessions:
+            count = db.query(func.count(Message.id)).filter(Message.session_id == s.id).scalar() or 0
+            result.append(SessionOut(
+                id=s.id,
+                title=s.title,
+                created_at=str(s.created_at),
+                updated_at=str(s.updated_at),
+                message_count=count,
+            ))
+        return result
+    finally:
+        db.close()
+
+
+@app.get("/api/sessions/{session_id}", response_model=SessionOut)
+def get_session(session_id: int):
+    """Get a single chat session."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.models import ChatSession, Message
+    from sqlalchemy import func
+    db = get_session_factory()()
+    try:
+        session = db.get(ChatSession, session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        count = db.query(func.count(Message.id)).filter(Message.session_id == session_id).scalar() or 0
+        return SessionOut(
+            id=session.id,
+            title=session.title,
+            created_at=str(session.created_at),
+            updated_at=str(session.updated_at),
+            message_count=count,
+        )
+    finally:
+        db.close()
+
+
+@app.delete("/api/sessions/{session_id}")
+def delete_session(session_id: int):
+    """Delete a chat session and its messages."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.models import ChatSession, Message
+    db = get_session_factory()()
+    try:
+        session = db.get(ChatSession, session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        db.query(Message).filter(Message.session_id == session_id).delete()
+        db.delete(session)
+        db.commit()
+        return {"status": "deleted"}
+    finally:
+        db.close()
+
+
+@app.put("/api/sessions/{session_id}")
+def update_session_title(session_id: int, req: SessionCreate):
+    """Update session title."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.models import ChatSession
+    db = get_session_factory()()
+    try:
+        session = db.get(ChatSession, session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        session.title = req.title
+        db.commit()
+        return {"status": "updated"}
+    finally:
+        db.close()
+
+
+@app.get("/api/sessions/{session_id}/messages", response_model=list[MessageOut])
+def get_session_messages(session_id: int):
+    """Get all messages in a session."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.models import Message
+    db = get_session_factory()()
+    try:
+        messages = (
+            db.query(Message)
+            .filter(Message.session_id == session_id)
+            .order_by(Message.timestamp.asc())
+            .all()
+        )
+        return [
+            MessageOut(id=m.id, role=m.role, content=m.content, timestamp=str(m.timestamp))
+            for m in messages
+        ]
+    finally:
+        db.close()
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     """Process a user message through the memory pipeline."""
     try:
         engine = get_engine()
-        result = engine.chat(req.message)
-        return ChatResponse(response=result["response"], pipeline=result.get("pipeline"))
+        result = engine.chat(req.message, session_id=req.session_id)
+        return ChatResponse(
+            response=result["response"],
+            pipeline=result.get("pipeline"),
+            session_id=result.get("session_id"),
+        )
     except Exception as e:
         logger.error("Chat error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))

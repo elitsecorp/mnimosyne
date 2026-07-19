@@ -39,29 +39,52 @@ class MemoryEngine:
         self._retrieval = retrieval or RetrievalService(self._embeddings, self._graph)
         self._session_factory = get_session_factory()
 
-    def chat(self, message: str) -> dict:
+    def chat(self, message: str, session_id: int | None = None) -> dict:
         """Process a user message through the full memory pipeline.
 
-        Returns dict with 'response' and 'pipeline' keys.
+        Args:
+            message: User message text.
+            session_id: Chat session ID. Creates new session if None.
+
+        Returns dict with 'response', 'pipeline', and 'session_id' keys.
         """
         db = self._session_factory()
         try:
-            return self._run_pipeline(db, message)
+            return self._run_pipeline(db, message, session_id)
         finally:
             db.close()
 
-    def _run_pipeline(self, db: Session, message: str) -> str:
+    def _run_pipeline(self, db: Session, message: str, session_id: int | None = None) -> str:
         """Execute the full chat pipeline within a single database session."""
+        # 0. Resolve session
+        if session_id is None:
+            from mnemosyne.models import ChatSession
+            session = ChatSession(title=message[:50])
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+            session_id = session.id
+        else:
+            from mnemosyne.models import ChatSession
+            session = db.get(ChatSession, session_id)
+            if not session:
+                session = ChatSession(title=message[:50])
+                db.add(session)
+                db.commit()
+                db.refresh(session)
+                session_id = session.id
+
         # 1. Store user message
-        user_msg = Message(role="user", content=message)
+        user_msg = Message(session_id=session_id, role="user", content=message)
         db.add(user_msg)
         db.commit()
         db.refresh(user_msg)
-        logger.debug("Stored user message id=%d", user_msg.id)
+        logger.debug("Stored user message id=%d in session %d", user_msg.id, session_id)
 
-        # 2. Load recent conversation history
+        # 2. Load recent conversation history for this session
         recent_msgs = (
             db.query(Message)
+            .filter(Message.session_id == session_id)
             .order_by(Message.timestamp.desc())
             .limit(20)
             .all()
@@ -92,11 +115,11 @@ class MemoryEngine:
         response = self._llm.chat(messages)
 
         # 6. Store assistant message
-        assistant_msg = Message(role="assistant", content=response)
+        assistant_msg = Message(session_id=session_id, role="assistant", content=response)
         db.add(assistant_msg)
         db.commit()
         db.refresh(assistant_msg)
-        logger.debug("Stored assistant message id=%d", assistant_msg.id)
+        logger.debug("Stored assistant message id=%d in session %d", assistant_msg.id, session_id)
 
         # 7. Extract new knowledge (skip for short or non-informative messages)
         extraction = None
@@ -150,7 +173,7 @@ class MemoryEngine:
             },
         }
 
-        return {"response": response, "pipeline": pipeline_meta}
+        return {"response": response, "pipeline": pipeline_meta, "session_id": session_id}
 
     _SKIP_PHRASES = {
         "ok", "okay", "yes", "no", "thanks", "thank you", "bye", "hello",

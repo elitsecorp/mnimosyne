@@ -5,10 +5,27 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class SessionCreate(BaseModel):
+    """Create a new chat session."""
+
+    title: str = Field(default="New Chat", max_length=256)
+
+
+class SessionOut(BaseModel):
+    """Chat session output."""
+
+    id: int
+    title: str
+    created_at: str
+    updated_at: str
+    message_count: int = 0
+
+
 class ChatRequest(BaseModel):
     """Incoming chat request."""
 
     message: str = Field(..., min_length=1, description="User message")
+    session_id: int | None = Field(default=None, description="Chat session ID")
 
 
 class ChatResponse(BaseModel):
@@ -16,6 +33,7 @@ class ChatResponse(BaseModel):
 
     response: str = Field(..., description="Assistant response text")
     pipeline: dict | None = Field(default=None, description="Pipeline metadata")
+    session_id: int | None = Field(default=None, description="Chat session ID")
 
 
 class SearchRequest(BaseModel):

@@ -12,16 +12,31 @@ class Base(DeclarativeBase):
     """Base class for all ORM models."""
 
 
+class ChatSession(Base):
+    """Chat session grouping conversation messages."""
+
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(256), nullable=False, default="New Chat")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC), onupdate=lambda: datetime.datetime.now(datetime.UTC))
+
+    messages: Mapped[list[Message]] = relationship("Message", back_populates="session", order_by="Message.timestamp")
+
+
 class Message(Base):
     """Stores conversation messages (user and assistant)."""
 
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("chat_sessions.id"), nullable=True)
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
 
+    session: Mapped[ChatSession] = relationship("ChatSession", back_populates="messages")
     embeddings: Mapped[list[Embedding]] = relationship("Embedding", back_populates="message")
 
 

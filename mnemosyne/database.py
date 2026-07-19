@@ -59,10 +59,26 @@ def get_db():
 
 
 def init_db() -> None:
-    """Create all tables if they don't exist."""
+    """Create all tables and run migrations for existing databases."""
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
+    _migrate_add_session_id(engine)
     logger.info("Database initialized.")
+
+
+def _migrate_add_session_id(engine) -> None:
+    """Add session_id to messages table if missing (migration for existing DBs)."""
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    columns = [col["name"] for col in inspector.get_columns("messages")]
+    if "session_id" not in columns:
+        logger.info("Migrating: adding session_id to messages table")
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE IF NOT EXISTS chat_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT 'New Chat', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
+            conn.execute(text("INSERT INTO chat_sessions (title) VALUES ('Default')"))
+            conn.execute(text("ALTER TABLE messages ADD COLUMN session_id INTEGER REFERENCES chat_sessions(id)"))
+            conn.execute(text("UPDATE messages SET session_id = 1 WHERE session_id IS NULL"))
+        logger.info("Migration complete: session_id added")
 
 
 def load_schema_sql() -> str:
