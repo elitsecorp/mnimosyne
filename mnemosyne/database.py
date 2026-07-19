@@ -70,14 +70,18 @@ def _migrate_add_session_id(engine) -> None:
     """Add session_id to messages table if missing (migration for existing DBs)."""
     from sqlalchemy import inspect, text
     inspector = inspect(engine)
+    tables = inspector.get_table_names()
+    if "chat_sessions" not in tables:
+        logger.info("Migrating: creating chat_sessions table")
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE chat_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT 'New Chat', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
+            conn.execute(text("INSERT INTO chat_sessions (title, created_at, updated_at) VALUES ('Default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"))
     columns = [col["name"] for col in inspector.get_columns("messages")]
     if "session_id" not in columns:
         logger.info("Migrating: adding session_id to messages table")
         with engine.begin() as conn:
-            conn.execute(text("CREATE TABLE IF NOT EXISTS chat_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT 'New Chat', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"))
-            conn.execute(text("INSERT INTO chat_sessions (title) VALUES ('Default')"))
             conn.execute(text("ALTER TABLE messages ADD COLUMN session_id INTEGER REFERENCES chat_sessions(id)"))
-            conn.execute(text("UPDATE messages SET session_id = 1 WHERE session_id IS NULL"))
+            conn.execute(text("UPDATE messages SET session_id = (SELECT id FROM chat_sessions LIMIT 1) WHERE session_id IS NULL"))
         logger.info("Migration complete: session_id added")
 
 
