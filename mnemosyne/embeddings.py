@@ -95,12 +95,15 @@ class EmbeddingService:
         db.refresh(record)
         return record
 
-    def search(self, db: Session, query: str, top_k: int = 5) -> list[dict]:
+    def search(self, db: Session, query: str, top_k: int = 5, query_vector: list[float] | None = None) -> list[dict]:
         """Search for the most similar stored embeddings.
+
+        Args:
+            query_vector: Pre-computed embedding. If None, will embed the query.
 
         Returns list of dicts with keys: id, message_id, text, score.
         """
-        query_vec = self.embed(query)
+        query_vec = query_vector if query_vector is not None else self.embed(query)
         if _USE_SQLITE_VEC:
             return self._search_sqlite_vec(db, query_vec, top_k)
         if _USE_FAISS:

@@ -81,7 +81,11 @@ class MemoryEngine:
         db.refresh(user_msg)
         logger.debug("Stored user message id=%d in session %d", user_msg.id, session_id)
 
-        # 2. Load recent conversation history for this session
+        # 2. Embed and store user message for future vector search
+        user_embedding = self._embeddings.embed(message)
+        self._embeddings.store_embedding(db, user_msg.id, message, user_embedding)
+
+        # 3. Load recent conversation history for this session
         recent_msgs = (
             db.query(Message)
             .filter(Message.session_id == session_id)
@@ -101,7 +105,7 @@ class MemoryEngine:
             min_confidence=0.0,
             token_budget=4000,
         )
-        result = pipeline.run(db, message, conversation)
+        result = pipeline.run(db, message, conversation, query_vector=user_embedding)
 
         # 4. Build LLM messages with pipeline context
         messages = build_chat_messages(

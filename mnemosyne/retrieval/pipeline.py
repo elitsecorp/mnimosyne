@@ -64,8 +64,13 @@ class ContextPipeline:
         db: Session,
         query: str,
         conversation: list[dict[str, str]] | None = None,
+        query_vector: list[float] | None = None,
     ) -> PipelineResult:
-        """Execute the full deterministic pipeline."""
+        """Execute the full deterministic pipeline.
+
+        Args:
+            query_vector: Pre-computed embedding to avoid duplicate API call.
+        """
         import time
         start = time.time()
 
@@ -106,7 +111,7 @@ class ContextPipeline:
         if plan.vector_enabled:
             mem_retriever = MemoryRetriever(self._embeddings)
             memory_result = mem_retriever.retrieve(
-                db, query, top_k=10, min_similarity=0.0,
+                db, query, top_k=10, min_similarity=0.0, query_vector=query_vector,
             )
             ranker = Ranker(self._weights)
             mem_items = ranker.rank_memories(memory_result.memories, plan.detected_entities)

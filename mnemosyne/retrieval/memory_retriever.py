@@ -31,12 +31,17 @@ class MemoryRetriever:
         query: str,
         top_k: int = 10,
         min_similarity: float = 0.0,
+        query_vector: list[float] | None = None,
     ) -> MemoryResult:
-        """Search for semantically similar past messages."""
+        """Search for semantically similar past messages.
+
+        Args:
+            query_vector: Pre-computed embedding to avoid duplicate API call.
+        """
         if not query.strip():
             return MemoryResult()
 
-        raw_results = self._embeddings.search(db, query, top_k=top_k)
+        raw_results = self._embeddings.search(db, query, top_k=top_k, query_vector=query_vector)
 
         memories = []
         for r in raw_results:
