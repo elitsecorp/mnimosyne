@@ -56,6 +56,7 @@ class ConsolidationService:
             recommendations.extend(self._find_relationship_normalization(db))
             recommendations.extend(self._find_duplicate_relationships(db))
             recommendations.extend(self._find_orphans(db))
+            recommendations.extend(self._find_unsupported_relationships(db))
             recommendations.extend(self._calculate_confidence_changes(db))
 
             for i, rec in enumerate(recommendations):
@@ -68,6 +69,7 @@ class ConsolidationService:
                 "normalize_relationships": sum(1 for r in recommendations if r["type"] == "normalize_relationship"),
                 "duplicate_relationships": sum(1 for r in recommendations if r["type"] == "duplicate_relationship"),
                 "orphans": sum(1 for r in recommendations if r["type"] == "orphan"),
+                "unsupported_relationships": sum(1 for r in recommendations if r["type"] == "unsupported_relationship"),
                 "confidence_changes": sum(1 for r in recommendations if r["type"] == "confidence_change"),
             }
 
@@ -130,6 +132,9 @@ class ConsolidationService:
 
         elif rec_type == "orphan":
             self._apply_delete_entity(db, action["entity"])
+
+        elif rec_type == "unsupported_relationship":
+            self._apply_delete_relationship(db, action["subject"], action["predicate"], action["object"])
 
         elif rec_type == "confidence_change":
             self._apply_confidence_change(db, action["entity"] if "entity" in action else rec["affected_nodes"][0], action["new"])
@@ -390,3 +395,50 @@ class ConsolidationService:
                 })
 
         return recommendations
+
+    def _find_unsupported_relationships(self, db: Session) -> list[dict]:
+        """Find relationships with no supporting facts."""
+        relationships = db.query(Relationship).all()
+        recommendations = []
+
+        for rel in relationships:
+            fact_count = (
+                db.query(Fact)
+                .filter(
+                    Fact.subject == rel.subject,
+                    Fact.predicate == rel.predicate,
+                    Fact.object == rel.object,
+                )
+                .count()
+            )
+
+            if fact_count == 0:
+                recommendations.append({
+                    "type": "unsupported_relationship",
+                    "reason": f'"{rel.subject} {rel.predicate} {rel.object}" has no supporting facts',
+                    "confidence": round(rel.confidence, 3),
+                    "evidence": [
+                        f"Relationship confidence: {rel.confidence:.2f}",
+                        f"Supporting facts: 0",
+                    ],
+                    "affected_nodes": [rel.subject, rel.object],
+                    "proposed_action": {
+                        "subject": rel.subject,
+                        "predicate": rel.predicate,
+                        "object": rel.object,
+                    },
+                    "status": "pending",
+                })
+
+        return recommendations
+
+    def _apply_delete_relationship(self, db: Session, subject: str, predicate: str, obj: str) -> None:
+        """Delete a relationship with no supporting evidence."""
+        rel = (
+            db.query(Relationship)
+            .filter_by(subject=subject, predicate=predicate, object=obj)
+            .first()
+        )
+        if rel:
+            db.delete(rel)
+            logger.info("Deleted unsupported relationship: %s %s %s", subject, predicate, obj)
