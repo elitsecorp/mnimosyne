@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from mnemosyne.retrieval.planner import QueryPlan
 from mnemosyne.retrieval.ranker import ScoredItem
+from mnemosyne.retrieval.summarizer import summarize_conversation, extract_key_entities
 
 
 class ContextBuilder:
@@ -20,6 +21,15 @@ class ContextBuilder:
     ) -> str:
         """Build structured context from scored items."""
         sections = []
+
+        if conversation:
+            summary = summarize_conversation(conversation, max_sentences=4)
+            if summary:
+                sections.append("Session summary:\n" + summary)
+
+            key_terms = extract_key_entities(conversation)
+            if key_terms:
+                sections.append("Key terms discussed: " + ", ".join(key_terms[:10]))
 
         entities = [i for i in items if i.item_type == "entity"]
         relationships = [i for i in items if i.item_type == "relationship"]

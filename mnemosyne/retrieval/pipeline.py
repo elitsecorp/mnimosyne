@@ -105,14 +105,12 @@ class ContextPipeline:
         memory_result = None
         if plan.vector_enabled:
             mem_retriever = MemoryRetriever(self._embeddings)
-            graph_has_enough = len([i for i in all_items if i.item_type in ("relationship", "fact")]) >= 3
-            if not graph_has_enough:
-                memory_result = mem_retriever.retrieve(
-                    db, query, top_k=10, min_similarity=0.0,
-                )
-                ranker = Ranker(self._weights)
-                mem_items = ranker.rank_memories(memory_result.memories, plan.detected_entities)
-                all_items.extend(mem_items)
+            memory_result = mem_retriever.retrieve(
+                db, query, top_k=10, min_similarity=0.0,
+            )
+            ranker = Ranker(self._weights)
+            mem_items = ranker.rank_memories(memory_result.memories, plan.detected_entities)
+            all_items.extend(mem_items)
 
         deduped = Deduplicator().dedup(all_items)
         compressed = Compressor(self._token_budget).compress(deduped)

@@ -232,3 +232,59 @@ class TestContextBuilder:
         plan = QueryPlan(query_type="general")
         context = builder.build([], plan)
         assert "No relevant information" in context
+
+    def test_builds_with_conversation(self):
+        builder = ContextBuilder()
+        plan = QueryPlan(query_type="general")
+        conversation = [
+            {"role": "user", "content": "My dog Max is very playful"},
+            {"role": "assistant", "content": "That's great! Max sounds like a fun dog."},
+        ]
+        items = [
+            ScoredItem(item={"name": "Max", "type": "animal"}, item_type="entity", score=0.9),
+        ]
+        context = builder.build(items, plan, conversation)
+        assert "Session summary:" in context
+        assert "Key terms discussed:" in context
+
+
+class TestSummarizer:
+    def test_summarize_short_text(self):
+        from mnemosyne.retrieval.summarizer import summarize
+        text = "Short text."
+        result = summarize(text, max_sentences=3)
+        assert result == text
+
+    def test_summarize_long_text(self):
+        from mnemosyne.retrieval.summarizer import summarize
+        text = "First sentence about dogs. Second sentence about cats. Third sentence about birds. Fourth sentence about fish."
+        result = summarize(text, max_sentences=2)
+        assert len(result) < len(text)
+        assert len(result) > 0
+
+    def test_summarize_empty(self):
+        from mnemosyne.retrieval.summarizer import summarize
+        assert summarize("") == ""
+        assert summarize("   ") == ""
+
+    def test_summarize_conversation(self):
+        from mnemosyne.retrieval.summarizer import summarize_conversation
+        messages = [
+            {"role": "user", "content": "My dog Max is very playful and loves fetch."},
+            {"role": "assistant", "content": "Max sounds like a great dog! Fetch is a wonderful game."},
+            {"role": "user", "content": "He also loves swimming at the lake."},
+            {"role": "assistant", "content": "Swimming is excellent exercise for dogs!"},
+        ]
+        result = summarize_conversation(messages, max_sentences=2)
+        assert len(result) > 0
+        assert len(result) < sum(len(m["content"]) for m in messages)
+
+    def test_extract_key_entities(self):
+        from mnemosyne.retrieval.summarizer import extract_key_entities
+        messages = [
+            {"role": "user", "content": "Max the dog loves playing fetch at the park every day"},
+            {"role": "assistant", "content": "Max sounds like an energetic dog who enjoys the park"},
+        ]
+        entities = extract_key_entities(messages)
+        assert len(entities) > 0
+        assert "max" in entities
