@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mnemosyne - Consolidate Memory</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+        header { background: #16213e; padding: 12px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.3rem; color: #e94560; }
+        nav a { color: #888; text-decoration: none; margin-left: 16px; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
+        nav a:hover, nav a.active { color: #e0e0e0; background: #0f3460; }
+        .content { flex: 1; padding: 24px; max-width: 1000px; margin: 0 auto; width: 100%; overflow-y: auto; }
+        .card { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+        .card h2 { color: #e94560; font-size: 1.1rem; margin-bottom: 12px; }
+        button { padding: 10px 20px; border-radius: 6px; border: none; font-size: 0.9rem; cursor: pointer; font-weight: 600; }
+        .btn-primary { background: #e94560; color: #fff; }
+        .btn-primary:hover { background: #c73650; }
+        .btn-primary:disabled { background: #555; cursor: not-allowed; }
+        .btn-approve { background: #14532d; color: #53d853; font-size: 0.8rem; padding: 6px 12px; }
+        .btn-approve:hover { background: #166534; }
+        .btn-reject { background: #7f1d1d; color: #fca5a5; font-size: 0.8rem; padding: 6px 12px; }
+        .btn-reject:hover { background: #991b1b; }
+        .btn-apply { background: #0f3460; color: #53a8ff; font-size: 0.85rem; }
+        .btn-apply:hover { background: #1e3a5f; }
+        .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+        .summary-box { background: #1a1a2e; border-radius: 6px; padding: 12px; text-align: center; }
+        .summary-box .num { font-size: 1.5rem; color: #e94560; font-weight: 700; }
+        .summary-box .lbl { font-size: 0.7rem; color: #888; margin-top: 4px; text-transform: uppercase; }
+        .rec-card { background: #1a1a2e; border: 1px solid #0f3460; border-radius: 6px; padding: 16px; margin-bottom: 12px; }
+        .rec-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .rec-type { font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; font-weight: 600; text-transform: uppercase; }
+        .type-duplicate_entity { background: #7f1d1d; color: #fca5a5; }
+        .type-normalize_relationship { background: #1e3a5f; color: #53a8ff; }
+        .type-duplicate_relationship { background: #78350f; color: #fbbf24; }
+        .type-orphan { background: #3b0764; color: #c084fc; }
+        .type-confidence_change { background: #14532d; color: #53d853; }
+        .rec-reason { font-size: 0.9rem; margin-bottom: 8px; }
+        .rec-evidence { font-size: 0.8rem; color: #888; margin-bottom: 8px; }
+        .rec-evidence div { padding: 4px 8px; background: #16213e; border-radius: 4px; margin-bottom: 2px; }
+        .rec-affected { font-size: 0.8rem; color: #53a8ff; margin-bottom: 8px; }
+        .rec-actions { display: flex; gap: 8px; }
+        .rec-card.applied { opacity: 0.5; border-color: #14532d; }
+        .rec-card.rejected { opacity: 0.5; border-color: #7f1d1d; }
+        .empty { text-align: center; color: #555; padding: 48px; }
+        .loading { text-align: center; color: #888; padding: 48px; }
+        .bottom-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Mnemosyne</h1>
+        <nav>
+            <a href="/">Chat</a>
+            <a href="/memories">Memories</a>
+            <a href="/graph-explorer">Graph</a>
+            <a href="/importer">Import</a>
+            <a href="/consolidate" class="active">Consolidate</a>
+        </nav>
+    </header>
+    <div class="content">
+        <div class="card">
+            <h2>Memory Consolidator</h2>
+            <p style="color:#888;font-size:0.9rem;margin-bottom:12px;">Analyze your knowledge graph for duplicates, orphans, and quality improvements. Review recommendations before applying.</p>
+            <button class="btn-primary" id="analyze-btn" onclick="runAnalysis()">Analyze Graph</button>
+        </div>
+
+        <div id="results" style="display:none;">
+            <div class="card">
+                <h2>Summary</h2>
+                <div class="summary-grid" id="summary"></div>
+            </div>
+            <div id="recommendations"></div>
+            <div id="apply-status" style="display:none;padding:12px;background:#1e3a5f;border-radius:6px;color:#53a8ff;font-size:0.9rem;margin-bottom:12px;"></div>
+            <div class="bottom-actions">
+                <button class="btn-approve" onclick="acceptAll()">Accept All</button>
+                <button class="btn-reject" onclick="rejectAll()">Reject All</button>
+                <button class="btn-apply" id="apply-btn" onclick="applyAll()">Apply Selected</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let report = null;
+        let recStatus = {};
+
+        async function runAnalysis() {
+            document.getElementById('analyze-btn').disabled = true;
+            document.getElementById('analyze-btn').textContent = 'Analyzing...';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('recommendations').innerHTML = '<div class="loading">Running all analyses...</div>';
+
+            try {
+                const res = await fetch('/api/consolidate/analyze', { method: 'POST' });
+                report = await res.json();
+                recStatus = {};
+                report.recommendations.forEach((r, i) => recStatus[i] = 'pending');
+                renderReport();
+                document.getElementById('results').style.display = 'block';
+                document.getElementById('apply-status').style.display = 'none';
+            } catch (e) {
+                document.getElementById('recommendations').innerHTML = `<div class="empty">Analysis failed: ${esc(e.message)}</div>`;
+            }
+
+            document.getElementById('analyze-btn').disabled = false;
+            document.getElementById('analyze-btn').textContent = 'Analyze Graph';
+        }
+
+        function renderReport() {
+            const s = report.summary;
+            document.getElementById('summary').innerHTML = `
+                <div class="summary-box"><div class="num">${s.duplicate_entities}</div><div class="lbl">Duplicates</div></div>
+                <div class="summary-box"><div class="num">${s.normalize_relationships}</div><div class="lbl">Normalize</div></div>
+                <div class="summary-box"><div class="num">${s.duplicate_relationships}</div><div class="lbl">Dup Rels</div></div>
+                <div class="summary-box"><div class="num">${s.orphans}</div><div class="lbl">Orphans</div></div>
+                <div class="summary-box"><div class="num">${s.confidence_changes}</div><div class="lbl">Conf Changes</div></div>
+            `;
+
+            if (report.recommendations.length === 0) {
+                document.getElementById('recommendations').innerHTML = '<div class="card"><div class="empty">No issues found. Your graph looks good!</div></div>';
+                return;
+            }
+
+            const html = report.recommendations.map((r, i) => {
+                const status = recStatus[i];
+                const statusClass = status === 'approved' ? 'applied' : status === 'rejected' ? 'rejected' : '';
+                const evidenceHtml = r.evidence.map(e => `<div>${esc(e)}</div>`).join('');
+
+                return `
+                    <div class="rec-card ${statusClass}">
+                        <div class="rec-header">
+                            <span class="rec-type type-${r.type}">${r.type.replace(/_/g, ' ')}</span>
+                            <span style="font-size:0.8rem;color:#888;">${r.confidence.toFixed(2)}</span>
+                        </div>
+                        <div class="rec-reason">${esc(r.reason)}</div>
+                        <div class="rec-evidence">${evidenceHtml}</div>
+                        <div class="rec-affected">Affected: ${r.affected_nodes.map(n => esc(n)).join(', ')}</div>
+                        <div class="rec-actions">
+                            <button class="btn-approve" onclick="setAction(${i}, 'approved')" ${status !== 'pending' ? 'disabled' : ''}>Approve</button>
+                            <button class="btn-reject" onclick="setAction(${i}, 'rejected')" ${status !== 'pending' ? 'disabled' : ''}>Reject</button>
+                            <span style="font-size:0.8rem;color:#888;padding:6px;">${status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : ''}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('recommendations').innerHTML = html;
+        }
+
+        function setAction(idx, action) {
+            recStatus[idx] = action;
+            renderReport();
+        }
+
+        function acceptAll() {
+            if (!report) return;
+            report.recommendations.forEach((r, i) => recStatus[i] = 'approved');
+            renderReport();
+            document.getElementById('apply-status').textContent = 'All approved. Click "Apply Selected" to commit changes.';
+            document.getElementById('apply-status').style.display = 'block';
+        }
+
+        function rejectAll() {
+            if (!report) return;
+            report.recommendations.forEach((r, i) => recStatus[i] = 'rejected');
+            renderReport();
+            document.getElementById('apply-status').textContent = 'All rejected. Click "Apply Selected" to commit.';
+            document.getElementById('apply-status').style.display = 'block';
+        }
+
+        async function applyAll() {
+            const actions = Object.entries(recStatus)
+                .filter(([_, s]) => s !== 'pending')
+                .map(([idx, s]) => ({ id: parseInt(idx), action: s === 'approved' ? 'approve' : 'reject' }));
+
+            console.log('Apply actions:', actions);
+
+            if (actions.length === 0) {
+                alert('No changes selected. Click Accept All or Reject All first, then click Apply Selected.');
+                return;
+            }
+
+            const msg = `About to apply ${actions.length} changes. Continue?`;
+            if (!confirm(msg)) return;
+
+            document.getElementById('apply-btn').disabled = true;
+            document.getElementById('apply-btn').textContent = 'Applying...';
+            try {
+                const body = JSON.stringify({ actions });
+                console.log('Sending body:', body);
+                const res = await fetch('/api/consolidate/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body
+                });
+                const result = await res.json();
+                console.log('Apply result:', result);
+                document.getElementById('apply-btn').textContent = 'Apply Selected';
+
+                let detail = `Applied: ${result.applied}\nRejected: ${result.rejected}`;
+                if (result.errors.length) detail += '\nErrors:\n' + result.errors.join('\n');
+                alert(detail + '\n\nRe-analyzing to show remaining issues...');
+                runAnalysis();
+            } catch (e) {
+                console.error('Apply error:', e);
+                alert('Apply failed: ' + e.message);
+                document.getElementById('apply-btn').textContent = 'Apply Selected';
+            }
+            document.getElementById('apply-btn').disabled = false;
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+    </script>
+</body>
+</html>

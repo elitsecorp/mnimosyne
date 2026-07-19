@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mnemosyne - Import Data</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+        header { background: #16213e; padding: 12px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.3rem; color: #e94560; }
+        nav a { color: #888; text-decoration: none; margin-left: 16px; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
+        nav a:hover, nav a.active { color: #e0e0e0; background: #0f3460; }
+        .content { flex: 1; padding: 24px; max-width: 900px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 20px; }
+        .card { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 20px; }
+        .card h2 { color: #e94560; font-size: 1.1rem; margin-bottom: 12px; }
+        textarea { width: 100%; height: 200px; padding: 12px; border-radius: 6px; border: 1px solid #0f3460; background: #1a1a2e; color: #e0e0e0; font-size: 0.9rem; font-family: inherit; resize: vertical; outline: none; }
+        textarea:focus { border-color: #e94560; }
+        .actions { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+        button { padding: 10px 20px; border-radius: 6px; border: none; font-size: 0.9rem; cursor: pointer; font-weight: 600; }
+        .btn-primary { background: #e94560; color: #fff; }
+        .btn-primary:hover { background: #c73650; }
+        .btn-primary:disabled { background: #555; cursor: not-allowed; }
+        .btn-danger { background: #7f1d1d; color: #fca5a5; }
+        .btn-danger:hover { background: #991b1b; }
+        .file-label { padding: 10px 20px; border-radius: 6px; border: 1px dashed #0f3460; color: #888; cursor: pointer; font-size: 0.85rem; }
+        .file-label:hover { border-color: #e94560; color: #e0e0e0; }
+        input[type=file] { display: none; }
+        .progress-section { display: none; }
+        .progress-section.active { display: block; }
+        .progress-bar { height: 8px; background: #0f3460; border-radius: 4px; margin: 12px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: #e94560; border-radius: 4px; transition: width 0.3s; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+        .stat-box { background: #1a1a2e; border-radius: 6px; padding: 12px; text-align: center; }
+        .stat-box .num { font-size: 1.5rem; color: #e94560; font-weight: 700; }
+        .stat-box .lbl { font-size: 0.75rem; color: #888; margin-top: 4px; }
+        .status { padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 12px; }
+        .status.running { background: #1e3a5f; color: #53a8ff; }
+        .status.completed { background: #14532d; color: #53d853; }
+        .status.error { background: #7f1d1d; color: #fca5a5; }
+        .status.cancelled { background: #78350f; color: #fbbf24; }
+        .errors { margin-top: 12px; }
+        .error-item { padding: 6px 10px; background: #7f1d1d; border-radius: 4px; font-size: 0.8rem; color: #fca5a5; margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Mnemosyne</h1>
+        <nav>
+            <a href="/">Chat</a>
+            <a href="/memories">Memories</a>
+            <a href="/graph-explorer">Graph</a>
+            <a href="/importer" class="active">Import</a>
+            <a href="/consolidate">Consolidate</a>
+        </nav>
+    </header>
+    <div class="content">
+        <div class="card">
+            <h2>Import Text</h2>
+            <textarea id="input-text" placeholder="Paste text, markdown, conversation transcripts, research notes, or any document content..."></textarea>
+            <div class="actions">
+                <button class="btn-primary" id="import-btn" onclick="startImport()">Import</button>
+                <label class="file-label">
+                    Or upload file (.txt, .md)
+                    <input type="file" id="file-input" accept=".txt,.md,.json,.csv" onchange="handleFile(event)">
+                </label>
+                <span id="file-name" style="color:#888;font-size:0.85rem;"></span>
+            </div>
+        </div>
+
+        <div class="card progress-section" id="progress-section">
+            <h2>Import Progress</h2>
+            <div class="status running" id="status-badge">Running...</div>
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+            <div id="progress-text" style="font-size:0.85rem;color:#888;">Preparing...</div>
+            <div class="stats-grid">
+                <div class="stat-box"><div class="num" id="s-chunks">0</div><div class="lbl">Chunks</div></div>
+                <div class="stat-box"><div class="num" id="s-entities">0</div><div class="lbl">Entities</div></div>
+                <div class="stat-box"><div class="num" id="s-rels">0</div><div class="lbl">Relationships</div></div>
+            </div>
+            <div class="actions" style="margin-top:12px;">
+                <button class="btn-danger" id="cancel-btn" onclick="cancelJob()">Cancel</button>
+            </div>
+            <div class="errors" id="errors"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let pollInterval = null;
+
+        async function startImport() {
+            const text = document.getElementById('input-text').value.trim();
+            if (!text) return;
+
+            document.getElementById('import-btn').disabled = true;
+            document.getElementById('progress-section').classList.add('active');
+
+            try {
+                const res = await fetch('/api/import/text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                currentJobId = data.job_id;
+                pollInterval = setInterval(pollJob, 2000);
+            } catch (e) {
+                alert('Failed to start import: ' + e.message);
+                document.getElementById('import-btn').disabled = false;
+            }
+        }
+
+        async function handleFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            document.getElementById('file-name').textContent = file.name;
+            const text = await file.text();
+            document.getElementById('input-text').value = text;
+        }
+
+        async function pollJob() {
+            if (!currentJobId) return;
+            try {
+                const res = await fetch(`/api/import/job/${currentJobId}`);
+                const data = await res.json();
+                updateUI(data);
+
+                if (data.status !== 'running') {
+                    clearInterval(pollInterval);
+                    document.getElementById('import-btn').disabled = false;
+                    document.getElementById('cancel-btn').style.display = 'none';
+                }
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+        }
+
+        function updateUI(data) {
+            const pct = data.total_chunks > 0 ? (data.processed_chunks / data.total_chunks * 100) : 0;
+            document.getElementById('progress-fill').style.width = pct + '%';
+            document.getElementById('progress-text').textContent = `${data.processed_chunks} / ${data.total_chunks} chunks`;
+            document.getElementById('s-chunks').textContent = data.processed_chunks;
+            document.getElementById('s-entities').textContent = data.entities_extracted;
+            document.getElementById('s-rels').textContent = data.relationships_extracted;
+
+            const badge = document.getElementById('status-badge');
+            badge.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+            badge.className = 'status ' + data.status;
+
+            if (data.errors.length > 0) {
+                document.getElementById('errors').innerHTML = data.errors.map(e => `<div class="error-item">${esc(e)}</div>`).join('');
+            }
+        }
+
+        async function cancelJob() {
+            if (!currentJobId) return;
+            await fetch(`/api/import/cancel/${currentJobId}`, { method: 'POST' });
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+    </script>
+</body>
+</html>

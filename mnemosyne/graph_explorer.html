@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mnemosyne - Knowledge Graph</title>
+    <script src="/static/cytoscape.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+        header { background: #16213e; padding: 12px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.3rem; color: #e94560; }
+        nav a { color: #888; text-decoration: none; margin-left: 16px; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
+        nav a:hover, nav a.active { color: #e0e0e0; background: #0f3460; }
+        .main { flex: 1; display: flex; overflow: hidden; }
+        .sidebar { width: 360px; background: #16213e; border-left: 1px solid #0f3460; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .sidebar h3 { color: #e94560; font-size: 1rem; margin-bottom: 8px; }
+        .sidebar .label { color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 8px; }
+        .sidebar .value { font-size: 0.95rem; }
+        .graph-area { flex: 1; position: relative; }
+        #cy { width: 100%; height: 100%; }
+        .controls { position: absolute; top: 12px; left: 12px; z-index: 10; display: flex; gap: 8px; }
+        .controls input { padding: 8px 12px; border-radius: 6px; border: 1px solid #0f3460; background: #16213e; color: #e0e0e0; font-size: 0.85rem; width: 220px; outline: none; }
+        .controls input:focus { border-color: #e94560; }
+        .controls button { padding: 8px 14px; border-radius: 6px; border: none; background: #0f3460; color: #e0e0e0; font-size: 0.85rem; cursor: pointer; }
+        .controls button:hover { background: #e94560; }
+        .filter-bar { position: absolute; top: 12px; right: 12px; z-index: 10; display: flex; gap: 8px; align-items: center; }
+        .filter-bar select, .filter-bar input[type=range] { padding: 6px 10px; border-radius: 6px; border: 1px solid #0f3460; background: #16213e; color: #e0e0e0; font-size: 0.8rem; }
+        .rel-list { list-style: none; }
+        .rel-list li { padding: 8px; background: #1a1a2e; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem; cursor: pointer; }
+        .rel-list li:hover { background: #0f3460; }
+        .rel-pred { color: #e94560; font-weight: 600; }
+        .evidence { padding: 8px; background: #1a1a2e; border-radius: 6px; font-size: 0.8rem; color: #aaa; font-style: italic; margin-bottom: 4px; max-height: 80px; overflow: hidden; }
+        .conf-bar { height: 6px; background: #0f3460; border-radius: 3px; margin-top: 4px; }
+        .conf-fill { height: 100%; background: #e94560; border-radius: 3px; }
+        .empty { text-align: center; color: #555; padding: 24px; }
+        .stats { font-size: 0.8rem; color: #888; position: absolute; bottom: 12px; left: 12px; z-index: 10; background: #16213e; padding: 6px 12px; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Mnemosyne</h1>
+        <nav>
+            <a href="/">Chat</a>
+            <a href="/memories">Memories</a>
+            <a href="/graph-explorer" class="active">Graph</a>
+            <a href="/importer">Import</a>
+            <a href="/consolidate">Consolidate</a>
+        </nav>
+    </header>
+    <div class="main">
+        <div class="graph-area">
+            <div class="controls">
+                <input type="text" id="search" placeholder="Search entities...">
+                <button onclick="searchNodes()">Search</button>
+                <button onclick="resetView()">Reset</button>
+            </div>
+            <div class="filter-bar">
+                <select id="type-filter" onchange="applyFilter()">
+                    <option value="">All types</option>
+                </select>
+                <label style="font-size:0.75rem;color:#888;">Min conf:</label>
+                <input type="range" id="conf-filter" min="0" max="100" value="0" onchange="applyFilter()" style="width:80px;">
+            </div>
+            <div id="cy"></div>
+            <div class="stats" id="stats">Loading...</div>
+        </div>
+        <div class="sidebar" id="sidebar">
+            <div class="empty">Click a node to see details</div>
+        </div>
+    </div>
+
+    <script>
+        let cy;
+        let allNodes = [];
+        let allEdges = [];
+        let expandedNodes = new Set();
+        let selectedType = '';
+
+        const typeColors = {
+            person: '#53a8ff', animal: '#53d853', place: '#ff9f43',
+            organization: '#a855f7', concept: '#888', project: '#e94560',
+            platform: '#06b6d4', entity: '#6b7280'
+        };
+
+        function getColor(type) { return typeColors[type] || '#6b7280'; }
+
+        async function loadGraph() {
+            const res = await fetch('/api/graph/seed?limit=40');
+            const data = await res.json();
+            allNodes = data.nodes;
+            allEdges = data.edges;
+            initCytoscape();
+            loadTypes();
+            updateStats();
+        }
+
+        function initCytoscape() {
+            const elements = [
+                ...allNodes.map(n => ({
+                    data: { id: 'n' + n.id, label: n.name, type: n.type, confidence: n.confidence, degree: n.degree, entity_id: n.id }
+                })),
+                ...allEdges.map(e => ({
+                    data: { id: 'e' + e.id, source: 'n' + e.source, target: 'n' + e.target, label: e.predicate, confidence: e.confidence, rel_id: e.id }
+                }))
+            ];
+
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements,
+                style: [
+                    { selector: 'node', style: {
+                        'label': 'data(label)',
+                        'background-color': ele => getColor(ele.data('type')),
+                        'width': ele => Math.max(20, 15 + ele.data('confidence') * 25),
+                        'height': ele => Math.max(20, 15 + ele.data('confidence') * 25),
+                        'font-size': '11px',
+                        'color': '#e0e0e0',
+                        'text-valign': 'bottom',
+                        'text-margin-y': 5,
+                        'border-color': '#0f3460',
+                        'border-width': 2,
+                    }},
+                    { selector: 'edge', style: {
+                        'label': 'data(label)',
+                        'line-color': '#0f3460',
+                        'target-arrow-color': '#0f3460',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'bezier',
+                        'font-size': '9px',
+                        'color': '#888',
+                        'width': ele => Math.max(1, ele.data('confidence') * 3),
+                        'text-rotation': 'autorotate',
+                    }},
+                    { selector: '.highlighted', style: {
+                        'border-color': '#e94560',
+                        'border-width': 4,
+                        'background-color': '#e94560',
+                    }},
+                    { selector: '.dimmed', style: { 'opacity': 0.15 } },
+                ],
+                layout: { name: 'cose', animate: true, animationDuration: 500, nodeDimensionsIncludeLabels: true },
+                minZoom: 0.2,
+                maxZoom: 5,
+            });
+
+            cy.on('tap', 'node', async (evt) => {
+                const node = evt.target;
+                showNodeDetail(node.data('entity_id'));
+            });
+
+            cy.on('tap', 'edge', async (evt) => {
+                const edge = evt.target;
+                showEdgeDetail(edge.data('rel_id'));
+            });
+
+            cy.on('dblclick', 'node', async (evt) => {
+                const node = evt.target;
+                const eid = node.data('entity_id');
+                if (!expandedNodes.has(eid)) {
+                    await expandNode(eid);
+                    expandedNodes.add(eid);
+                }
+            });
+        }
+
+        async function expandNode(entityId) {
+            const res = await fetch(`/api/graph/neighbors/${entityId}`);
+            const data = await res.json();
+
+            data.nodes.forEach(n => {
+                if (!cy.getElementById('n' + n.id).length) {
+                    cy.add({ data: { id: 'n' + n.id, label: n.name, type: n.type, confidence: n.confidence, degree: n.degree, entity_id: n.id } });
+                    allNodes.push(n);
+                }
+            });
+
+            data.edges.forEach(e => {
+                if (!cy.getElementById('e' + e.id).length) {
+                    cy.add({ data: { id: 'e' + e.id, source: 'n' + e.source, target: 'n' + e.target, label: e.predicate, confidence: e.confidence, rel_id: e.id } });
+                    allEdges.push(e);
+                }
+            });
+
+            cy.layout({ name: 'cose', animate: true, animationDuration: 300 }).run();
+            updateStats();
+        }
+
+        async function showNodeDetail(entityId) {
+            const res = await fetch(`/api/graph/node/${entityId}`);
+            const data = await res.json();
+            const sb = document.getElementById('sidebar');
+
+            let relsHtml = data.relationships.map(r => {
+                const other = r.subject === data.name ? r.object : r.subject;
+                const dir = r.subject === data.name ? '→' : '←';
+                return `<li onclick="showEdgeDetail(${r.id})"><span class="rel-pred">${dir} ${r.predicate}</span> ${other} <span style="color:#888;font-size:0.75rem;">(${r.confidence.toFixed(2)})</span></li>`;
+            }).join('');
+
+            let evHtml = data.evidence.map(e => `<div class="evidence">${esc(e.content.substring(0, 150))}</div>`).join('');
+
+            sb.innerHTML = `
+                <h3>${esc(data.name)}</h3>
+                <div class="label">Type</div><div class="value"><span style="color:${getColor(data.type)}">${esc(data.type)}</span></div>
+                <div class="label">Confidence</div>
+                <div class="conf-bar"><div class="conf-fill" style="width:${data.confidence * 100}%"></div></div>
+                <div style="font-size:0.8rem;color:#888;">${data.confidence.toFixed(2)}</div>
+                <div class="label">Relationships (${data.relationships.length})</div>
+                <ul class="rel-list">${relsHtml || '<li class="empty">None</li>'}</ul>
+                <div class="label">Evidence</div>
+                ${evHtml || '<div class="empty">No evidence found</div>'}
+            `;
+        }
+
+        async function showEdgeDetail(relId) {
+            const res = await fetch(`/api/graph/edge/${relId}`);
+            const data = await res.json();
+            const sb = document.getElementById('sidebar');
+
+            let evHtml = data.evidence.map(e => `<div class="evidence">${esc(e.content.substring(0, 150))}</div>`).join('');
+
+            sb.innerHTML = `
+                <h3>Relationship</h3>
+                <div class="value">${esc(data.subject)} <span class="rel-pred">${esc(data.predicate)}</span> ${esc(data.object)}</div>
+                <div class="label">Confidence</div>
+                <div class="conf-bar"><div class="conf-fill" style="width:${data.confidence * 100}%"></div></div>
+                <div style="font-size:0.8rem;color:#888;">${data.confidence.toFixed(2)}</div>
+                <div class="label">Evidence</div>
+                ${evHtml || '<div class="empty">No evidence found</div>'}
+            `;
+        }
+
+        async function loadTypes() {
+            const res = await fetch('/api/graph/types');
+            const data = await res.json();
+            const sel = document.getElementById('type-filter');
+            sel.innerHTML = '<option value="">All types</option>';
+            data.types.forEach(t => {
+                sel.innerHTML += `<option value="${esc(t.type)}">${esc(t.type)} (${t.count})</option>`;
+            });
+        }
+
+        function searchNodes() {
+            const query = document.getElementById('search').value.toLowerCase();
+            if (!query) { resetHighlight(); return; }
+
+            cy.elements().removeClass('highlighted dimmed');
+            const matches = cy.nodes().filter(n => n.data('label').toLowerCase().includes(query));
+
+            if (matches.length) {
+                cy.elements().addClass('dimmed');
+                matches.removeClass('dimmed').addClass('highlighted');
+                matchesighborhood = matches.neighborhood();
+                neighborhood.removeClass('dimmed');
+                cy.animate({ center: { eles: matches.first() }, zoom: 2 }, { duration: 300 });
+            }
+        }
+
+        function resetHighlight() {
+            cy.elements().removeClass('highlighted dimmed');
+            applyFilter();
+        }
+
+        function resetView() {
+            document.getElementById('search').value = '';
+            document.getElementById('type-filter').value = '';
+            document.getElementById('conf-filter').value = 0;
+            cy.elements().removeClass('highlighted dimmed');
+            cy.fit(undefined, 50);
+        }
+
+        function applyFilter() {
+            const type = document.getElementById('type-filter').value;
+            const minConf = parseInt(document.getElementById('conf-filter').value) / 100;
+            cy.elements().removeClass('dimmed highlighted');
+
+            cy.nodes().forEach(n => {
+                const matchType = !type || n.data('type') === type;
+                const matchConf = n.data('confidence') >= minConf;
+                if (!matchType || !matchConf) n.addClass('dimmed');
+            });
+
+            cy.edges().forEach(e => {
+                if (e.source().hasClass('dimmed') || e.target().hasClass('dimmed')) e.addClass('dimmed');
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('stats').textContent = `${cy.nodes().length} nodes, ${cy.edges().length} edges`;
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
+        document.getElementById('search').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchNodes(); });
+
+        loadGraph();
+    </script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mnemosyne - Memory Explorer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+        header { background: #16213e; padding: 16px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.3rem; color: #e94560; }
+        nav a { color: #888; text-decoration: none; margin-left: 16px; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
+        nav a:hover, nav a.active { color: #e0e0e0; background: #0f3460; }
+        .stats-bar { display: flex; gap: 24px; padding: 16px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
+        .stat { font-size: 0.85rem; color: #888; }
+        .stat strong { color: #e94560; font-size: 1.1rem; }
+        .tabs { display: flex; gap: 0; background: #16213e; border-bottom: 1px solid #0f3460; }
+        .tab { padding: 12px 24px; cursor: pointer; font-size: 0.9rem; color: #888; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab:hover { color: #e0e0e0; }
+        .tab.active { color: #e94560; border-bottom-color: #e94560; }
+        .content { flex: 1; overflow-y: auto; padding: 24px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { text-align: left; padding: 10px 12px; color: #888; border-bottom: 1px solid #0f3460; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        td { padding: 10px 12px; border-bottom: 1px solid #0f3460; }
+        tr:hover td { background: #16213e; }
+        .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; background: #0f3460; color: #53a8ff; }
+        .confidence { color: #888; font-family: monospace; }
+        .source-msg { max-width: 400px; font-size: 0.85rem; color: #aaa; font-style: italic; }
+        .role-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+        .role-user { background: #0f3460; color: #53a8ff; }
+        .role-assistant { background: #1a3a1a; color: #53d853; }
+        .msg-content { max-width: 600px; }
+        .empty { text-align: center; color: #555; padding: 48px; font-size: 1rem; }
+        .loading { text-align: center; color: #888; padding: 48px; }
+        .predicate { color: #e94560; font-weight: 600; }
+        .entity-link { color: #53a8ff; cursor: pointer; }
+        .entity-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Mnemosyne</h1>
+        <nav>
+            <a href="/">Chat</a>
+            <a href="/memories" class="active">Memories</a>
+            <a href="/graph-explorer">Graph</a>
+            <a href="/importer">Import</a>
+            <a href="/consolidate">Consolidate</a>
+        </nav>
+    </header>
+    <div class="stats-bar" id="stats-bar">
+        <div class="stat">Messages: <strong id="s-messages">-</strong></div>
+        <div class="stat">Embeddings: <strong id="s-embeddings">-</strong></div>
+        <div class="stat">Entities: <strong id="s-entities">-</strong></div>
+        <div class="stat">Relationships: <strong id="s-relationships">-</strong></div>
+        <div class="stat">Facts: <strong id="s-facts">-</strong></div>
+    </div>
+    <div class="tabs">
+        <div class="tab active" data-tab="entities">Entities</div>
+        <div class="tab" data-tab="relationships">Relationships</div>
+        <div class="tab" data-tab="facts">Facts</div>
+        <div class="tab" data-tab="messages">Messages</div>
+    </div>
+    <div class="content" id="content">
+        <div class="loading">Loading...</div>
+    </div>
+
+    <script>
+        const content = document.getElementById('content');
+        let currentTab = 'entities';
+        let cache = {};
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelector('.tab.active').classList.remove('active');
+                tab.classList.add('active');
+                currentTab = tab.dataset.tab;
+                if (cache[currentTab]) {
+                    render(cache[currentTab]);
+                } else {
+                    loadTab(currentTab);
+                }
+            });
+        });
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                document.getElementById('s-messages').textContent = data.messages;
+                document.getElementById('s-embeddings').textContent = data.embeddings;
+                document.getElementById('s-entities').textContent = data.entities;
+                document.getElementById('s-relationships').textContent = data.relationships;
+                document.getElementById('s-facts').textContent = data.facts;
+            } catch (e) {
+                console.error('Stats load failed:', e);
+            }
+        }
+
+        async function loadTab(tab) {
+            content.innerHTML = '<div class="loading">Loading...</div>';
+            try {
+                const res = await fetch('/api/' + tab);
+                const data = await res.json();
+                cache[tab] = data;
+                render(data);
+            } catch (e) {
+                content.innerHTML = '<div class="empty">Failed to load: ' + e.message + '</div>';
+            }
+        }
+
+        function render(data) {
+            if (!data || data.length === 0) {
+                content.innerHTML = '<div class="empty">No ' + currentTab + ' stored yet. Start a conversation to build memories.</div>';
+                return;
+            }
+
+            switch (currentTab) {
+                case 'entities': renderEntities(data); break;
+                case 'relationships': renderRelationships(data); break;
+                case 'facts': renderFacts(data); break;
+                case 'messages': renderMessages(data); break;
+            }
+        }
+
+        function renderEntities(data) {
+            let html = '<table><thead><tr><th>Name</th><th>Type</th><th>Confidence</th></tr></thead><tbody>';
+            data.forEach(e => {
+                html += '<tr><td>' + esc(e.name) + '</td><td><span class="type-badge">' + esc(e.type) + '</span></td><td class="confidence">' + e.confidence.toFixed(2) + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            content.innerHTML = html;
+        }
+
+        function renderRelationships(data) {
+            let html = '<table><thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th></tr></thead><tbody>';
+            data.forEach(r => {
+                html += '<tr><td>' + esc(r.subject) + '</td><td class="predicate">' + esc(r.predicate) + '</td><td>' + esc(r.object) + '</td><td class="confidence">' + r.confidence.toFixed(2) + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            content.innerHTML = html;
+        }
+
+        function renderFacts(data) {
+            let html = '<table><thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Source</th><th>Time</th></tr></thead><tbody>';
+            data.forEach(f => {
+                html += '<tr>';
+                html += '<td>' + esc(f.subject) + '</td>';
+                html += '<td class="predicate">' + esc(f.predicate) + '</td>';
+                html += '<td>' + esc(f.object) + '</td>';
+                html += '<td class="source-msg">' + esc(f.source_message) + '</td>';
+                html += '<td class="confidence">' + esc(f.timestamp) + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            content.innerHTML = html;
+        }
+
+        function renderMessages(data) {
+            let html = '<table><thead><tr><th>Role</th><th>Content</th><th>Time</th></tr></thead><tbody>';
+            data.forEach(m => {
+                const roleClass = m.role === 'user' ? 'role-user' : 'role-assistant';
+                html += '<tr>';
+                html += '<td><span class="role-badge ' + roleClass + '">' + esc(m.role) + '</span></td>';
+                html += '<td class="msg-content">' + esc(m.content) + '</td>';
+                html += '<td class="confidence">' + esc(m.timestamp) + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            content.innerHTML = html;
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s || '';
+            return d.innerHTML;
+        }
+
+        loadStats();
+        loadTab('entities');
+    </script>
+</body>
+</html>
