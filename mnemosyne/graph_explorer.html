@@ -30,7 +30,7 @@
         .rel-list li { padding: 8px; background: #1a1a2e; border-radius: 6px; margin-bottom: 4px; font-size: 0.85rem; cursor: pointer; }
         .rel-list li:hover { background: #0f3460; }
         .rel-pred { color: #e94560; font-weight: 600; }
-        .evidence { padding: 8px; background: #1a1a2e; border-radius: 6px; font-size: 0.8rem; color: #aaa; font-style: italic; margin-bottom: 4px; max-height: 80px; overflow: hidden; }
+        .evidence { padding: 8px; background: #1a1a2e; border-radius: 6px; font-size: 0.8rem; color: #aaa; font-style: italic; margin-bottom: 4px; }
         .conf-bar { height: 6px; background: #0f3460; border-radius: 3px; margin-top: 4px; }
         .conf-fill { height: 100%; background: #e94560; border-radius: 3px; }
         .empty { text-align: center; color: #555; padding: 24px; }
@@ -197,19 +197,19 @@
                 return `<li onclick="showEdgeDetail(${r.id})"><span class="rel-pred">${dir} ${r.predicate}</span> ${other} <span style="color:#888;font-size:0.75rem;">(${r.confidence.toFixed(2)})</span></li>`;
             }).join('');
 
-            let evHtml = data.evidence.map(e => `<div class="evidence">${esc(e.content.substring(0, 150))}</div>`).join('');
+                let evHtml = data.evidence.map(e => `<div class="evidence">${esc(e.content)}</div>`).join('');
 
-            sb.innerHTML = `
-                <h3>${esc(data.name)}</h3>
-                <div class="label">Type</div><div class="value"><span style="color:${getColor(data.type)}">${esc(data.type)}</span></div>
-                <div class="label">Confidence</div>
-                <div class="conf-bar"><div class="conf-fill" style="width:${data.confidence * 100}%"></div></div>
-                <div style="font-size:0.8rem;color:#888;">${data.confidence.toFixed(2)}</div>
-                <div class="label">Relationships (${data.relationships.length})</div>
-                <ul class="rel-list">${relsHtml || '<li class="empty">None</li>'}</ul>
-                <div class="label">Evidence</div>
-                ${evHtml || '<div class="empty">No evidence found</div>'}
-            `;
+                sb.innerHTML = `
+                    <h3>${esc(data.name)}</h3>
+                    <div class="label">Type</div><div class="value"><span style="color:${getColor(data.type)}">${esc(data.type)}</span></div>
+                    <div class="label">Confidence</div>
+                    <div class="conf-bar"><div class="conf-fill" style="width:${data.confidence * 100}%"></div></div>
+                    <div style="font-size:0.8rem;color:#888;">${data.confidence.toFixed(2)}</div>
+                    <div class="label">Relationships (${data.relationships.length})</div>
+                    <ul class="rel-list">${relsHtml || '<li class="empty">None</li>'}</ul>
+                    <div class="label">Evidence (${data.evidence.length})</div>
+                    ${evHtml || '<div class="empty">No evidence found</div>'}
+                `;
         }
 
         async function showEdgeDetail(relId) {
@@ -217,17 +217,17 @@
             const data = await res.json();
             const sb = document.getElementById('sidebar');
 
-            let evHtml = data.evidence.map(e => `<div class="evidence">${esc(e.content.substring(0, 150))}</div>`).join('');
+                let evHtml = data.evidence.map(e => `<div class="evidence">${esc(e.content)}</div>`).join('');
 
-            sb.innerHTML = `
-                <h3>Relationship</h3>
-                <div class="value">${esc(data.subject)} <span class="rel-pred">${esc(data.predicate)}</span> ${esc(data.object)}</div>
-                <div class="label">Confidence</div>
-                <div class="conf-bar"><div class="conf-fill" style="width:${data.confidence * 100}%"></div></div>
-                <div style="font-size:0.8rem;color:#888;">${data.confidence.toFixed(2)}</div>
-                <div class="label">Evidence</div>
-                ${evHtml || '<div class="empty">No evidence found</div>'}
-            `;
+                sb.innerHTML = `
+                    <h3>Relationship</h3>
+                    <div class="value">${esc(data.subject)} <span class="rel-pred">${esc(data.predicate)}</span> ${esc(data.object)}</div>
+                    <div class="label">Confidence</div>
+                    <div class="conf-bar"><div class="conf-fill" style="width:${data.confidence * 100}%"></div></div>
+                    <div style="font-size:0.8rem;color:#888;">${data.confidence.toFixed(2)}</div>
+                    <div class="label">Evidence (${data.evidence.length})</div>
+                    ${evHtml || '<div class="empty">No evidence found</div>'}
+                `;
         }
 
         async function loadTypes() {

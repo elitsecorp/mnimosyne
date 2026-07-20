@@ -132,8 +132,19 @@ class GraphExplorerService:
                     if msg:
                         evidence_ids.add(msg.id)
 
+            if not evidence_ids:
+                entity_msgs = (
+                    db.query(Message)
+                    .filter(Message.content.ilike(f"%{entity.name}%"))
+                    .order_by(Message.timestamp.desc())
+                    .limit(20)
+                    .all()
+                )
+                for msg in entity_msgs:
+                    evidence_ids.add(msg.id)
+
             evidence = []
-            for mid in list(evidence_ids)[:10]:
+            for mid in evidence_ids:
                 msg = db.get(Message, mid)
                 if msg:
                     evidence.append({

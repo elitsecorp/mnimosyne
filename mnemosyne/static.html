@@ -218,8 +218,7 @@ ${rels}</pre></div>`);
                 sections.push(`<div class="pipeline-section"><h4>Vector Memories</h4><pre>${mems}</pre></div>`);
             }
             if (meta.context_sent) {
-                const ctx = meta.context_sent.length > 800 ? meta.context_sent.substring(0, 800) + '...' : meta.context_sent;
-                sections.push(`<div class="pipeline-section"><h4>Context Sent to LLM</h4><pre>${esc(ctx)}</pre></div>`);
+                sections.push(`<div class="pipeline-section"><h4>Context Sent to LLM</h4><pre>${esc(meta.context_sent)}</pre></div>`);
             }
             if (meta.extraction) {
                 const e = meta.extraction;
