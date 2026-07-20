@@ -34,7 +34,28 @@ def extract_memory(
         logger.warning("Empty extraction response from LLM")
         return ExtractionResult()
 
-    return _parse_extraction(raw)
+    return _enforce_fact_coverage(result)
+
+
+def _enforce_fact_coverage(result: ExtractionResult) -> ExtractionResult:
+    """Ensure every relationship has a corresponding fact.
+
+    If a relationship exists without a matching fact, auto-generate the fact.
+    """
+    existing_facts = {(f.subject.lower(), f.predicate.lower(), f.object.lower()) for f in result.facts}
+
+    for rel in result.relationships:
+        key = (rel.subject.lower(), rel.predicate.lower(), rel.object.lower())
+        if key not in existing_facts:
+            result.facts.append(FactSchema(
+                subject=rel.subject,
+                predicate=rel.predicate,
+                object=rel.object,
+            ))
+            existing_facts.add(key)
+            logger.debug("Auto-generated fact for relationship: %s %s %s", rel.subject, rel.predicate, rel.object)
+
+    return result
 
 
 def _parse_extraction(data: dict) -> ExtractionResult:

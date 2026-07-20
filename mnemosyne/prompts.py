@@ -43,7 +43,9 @@ Output ONLY valid JSON matching this exact schema:
 Rules:
 - Entity types should be lowercase: person, animal, place, organization, object, concept, event, etc.
 - Predicates must use snake_case: works_for, likes, owns, located_in, etc.
-- Extract only clear, explicit facts. Do not infer.
+- EVERY relationship MUST have a corresponding fact with the same subject, predicate, and object.
+- Facts are the evidence for relationships. No relationship without evidence.
+- Extract only clear, explicit facts from the conversation. Do not infer.
 - confidence values between 0.0 and 1.0
 - No explanations. Only JSON. No markdown fencing."""
 
