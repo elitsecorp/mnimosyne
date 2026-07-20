@@ -11,7 +11,7 @@ from mnemosyne.database import init_db, get_session_factory
 from mnemosyne.embeddings import EmbeddingService
 from mnemosyne.graph import GraphService
 from mnemosyne.retrieval.pipeline import ContextPipeline
-from mnemosyne.evaluation.harness import EvalHarness
+from mnemosyne.evaluation.harness import EvalHarness, seed_test_data
 
 
 def main():
@@ -23,6 +23,7 @@ def main():
 
     db = get_session_factory()()
     try:
+        seed_test_data(db)
         graph.load_from_db(db)
     finally:
         db.close()

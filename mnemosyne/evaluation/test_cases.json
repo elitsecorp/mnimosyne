@@ -9,7 +9,6 @@
     {
         "query": "Tell me about Boeing",
         "expected_entities": ["Boeing"],
-        "expected_relationships": [],
         "expected_query_type": "entity_lookup",
         "min_entities": 1,
         "description": "Entity lookup with natural language"
@@ -17,6 +16,7 @@
     {
         "query": "Where does Alice work?",
         "expected_entities": ["Alice"],
+        "expected_relationships": [["Alice", "works_for", "Ethiopian Airlines"]],
         "expected_query_type": "relationship_query",
         "min_entities": 1,
         "min_relationships": 1,
@@ -41,7 +41,8 @@
     },
     {
         "query": "Who works at Ethiopian Airlines?",
-        "expected_entities": ["Ethiopian Airlines"],
+        "expected_entities": ["Ethiopian Airlines", "Alice"],
+        "expected_relationships": [["Alice", "works_for", "Ethiopian Airlines"]],
         "expected_query_type": "relationship_query",
         "min_entities": 1,
         "min_relationships": 1,
@@ -56,7 +57,7 @@
     },
     {
         "query": "What is the capital of Ethiopia?",
-        "expected_query_type": "general",
+        "expected_query_type": "fact_query",
         "description": "General knowledge question"
     },
     {

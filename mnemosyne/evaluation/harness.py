@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from mnemosyne.models import Entity, Relationship, Fact
 from mnemosyne.retrieval.pipeline import ContextPipeline, PipelineResult
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,51 @@ class TestResult:
     context_length: int
     elapsed_ms: float
     issues: list[str] = field(default_factory=list)
+
+
+def seed_test_data(db: Session) -> None:
+    """Seed the database with test entities, relationships, and facts."""
+    entities = [
+        Entity(name="Max", type="animal", confidence=0.95),
+        Entity(name="Boeing", type="organization", confidence=0.99),
+        Entity(name="Alice", type="person", confidence=0.9),
+        Entity(name="Ethiopian Airlines", type="organization", confidence=0.99),
+        Entity(name="Dog", type="entity", confidence=0.9),
+        Entity(name="Ethiopia", type="place", confidence=0.95),
+    ]
+    for ent in entities:
+        existing = db.query(Entity).filter_by(name=ent.name).first()
+        if not existing:
+            db.add(ent)
+    db.flush()
+
+    relationships = [
+        Relationship(subject="Alice", predicate="owns", object="Max", confidence=0.9),
+        Relationship(subject="Max", predicate="is_a", object="Dog", confidence=0.95),
+        Relationship(subject="Alice", predicate="works_for", object="Ethiopian Airlines", confidence=0.85),
+        Relationship(subject="Ethiopian Airlines", predicate="operates", object="Boeing", confidence=0.9),
+        Relationship(subject="Ethiopian Airlines", predicate="located_in", object="Ethiopia", confidence=0.95),
+    ]
+    for rel in relationships:
+        existing = db.query(Relationship).filter_by(
+            subject=rel.subject, predicate=rel.predicate, object=rel.object
+        ).first()
+        if not existing:
+            db.add(rel)
+
+    facts = [
+        Fact(subject="Max", predicate="is_a", object="dog", source_message="My dog's name is Max"),
+        Fact(subject="Alice", predicate="works_for", object="Ethiopian Airlines", source_message="Alice works at Ethiopian Airlines"),
+        Fact(subject="Ethiopian Airlines", predicate="operates", object="Boeing", source_message="Ethiopian Airlines operates Boeing aircraft"),
+    ]
+    for fact in facts:
+        existing = db.query(Fact).filter_by(
+            subject=fact.subject, predicate=fact.predicate, object=fact.object
+        ).first()
+        if not existing:
+            db.add(fact)
+
+    db.commit()
 
 
 class EvalHarness:
