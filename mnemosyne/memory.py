@@ -38,6 +38,8 @@ class MemoryEngine:
         self._llm = llm or LLMService()
         self._retrieval = retrieval or RetrievalService(self._embeddings, self._graph)
         self._session_factory = get_session_factory()
+        self._message_count = 0
+        self._auto_consolidate_interval = 5
 
     def chat(self, message: str, session_id: int | None = None) -> dict:
         """Process a user message through the full memory pipeline.
@@ -147,6 +149,11 @@ class MemoryEngine:
 
         # 10. Sync graph to DB
         self._graph.save(db)
+
+        # 11. Auto-consolidation every N prompts
+        self._message_count += 1
+        if self._message_count % self._auto_consolidate_interval == 0:
+            self._auto_consolidate(db)
 
         if extraction:
             logger.info(
@@ -263,3 +270,29 @@ class MemoryEngine:
     def get_neighbors(self, entity: str, hops: int = 1) -> dict:
         """Get neighbors of an entity in the knowledge graph."""
         return self._graph.get_neighbors(entity, hops=hops)
+
+    def _auto_consolidate(self, db: Session) -> None:
+        """Run consolidation and auto-apply all approved changes."""
+        try:
+            from mnemosyne.services.consolidation import ConsolidationService
+            svc = ConsolidationService()
+            report = svc.analyze()
+
+            total = len(report.get("recommendations", []))
+            if total == 0:
+                logger.info("Auto-consolidation: no issues found")
+                return
+
+            actions = [{"index": i, "action": "approve"} for i in range(total)]
+            result = svc.apply_recommendations(actions)
+
+            logger.info(
+                "Auto-consolidation: applied=%d, rejected=%d, errors=%d",
+                result.get("applied", 0),
+                result.get("rejected", 0),
+                len(result.get("errors", [])),
+            )
+
+            self._graph.load_from_db(db)
+        except Exception as e:
+            logger.error("Auto-consolidation failed: %s", e)
