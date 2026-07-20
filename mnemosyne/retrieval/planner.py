@@ -156,10 +156,6 @@ class QueryPlanner:
 
     def _needs_vector_search(self, query_type: str, entities: list[str]) -> bool:
         """Determine if vector search should be used."""
-        if query_type in ("conversation", "semantic_query"):
-            return True
-        if query_type in ("entity_lookup", "relationship_query", "fact_query"):
-            return len(entities) == 0
         return True
 
     def _needs_graph_search(self, query_type: str) -> bool:
