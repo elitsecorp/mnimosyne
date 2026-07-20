@@ -18,6 +18,9 @@ class Settings:
     database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", "sqlite:///mnemosyne.db"))
     vec_top_k: int = field(default_factory=lambda: int(os.getenv("VEC_TOP_K", "5")))
 
+    embedding_backend: str = field(default_factory=lambda: os.getenv("EMBEDDING_BACKEND", "local"))
+    local_embedding_model: str = field(default_factory=lambda: os.getenv("LOCAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
+
 
 def load_settings() -> Settings:
     """Load environment variables from .env and return Settings."""

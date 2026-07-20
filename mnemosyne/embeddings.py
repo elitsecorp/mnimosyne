@@ -1,4 +1,4 @@
-"""Embedding service: Gemini embeddings with sqlite-vec or FAISS vector storage."""
+"""Embedding service with Gemini and local (sentence-transformers) backends."""
 
 from __future__ import annotations
 
@@ -7,8 +7,6 @@ import struct
 from typing import Optional
 
 import numpy as np
-from google import genai
-from google.genai import types
 from sqlalchemy.orm import Session
 
 from mnemosyne.config import settings
@@ -45,19 +43,47 @@ def _deserialize_vector(data: bytes, dims: int) -> list[float]:
     return list(struct.unpack(f"{dims}f", data))
 
 
-class EmbeddingService:
-    """Handles embedding generation and vector similarity search.
+class LocalEmbeddingBackend:
+    """Local embedding backend using sentence-transformers.
 
-    Uses Gemini embeddings. Attempts sqlite-vec first, falls back to FAISS,
-    then brute-force numpy.
+    Downloads model on first use (~80MB for all-MiniLM-L6-v2).
     """
 
-    def __init__(self, client: Optional[genai.Client] = None) -> None:
-        self._client = client or genai.Client(api_key=settings.gemini_api_key)
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
+        self._model_name = model_name
+        self._model = None
+        self._dims = 0
+
+    def _load_model(self):
+        """Lazy-load the sentence-transformers model."""
+        if self._model is None:
+            logger.info("Loading local embedding model: %s", self._model_name)
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(self._model_name)
+            self._dims = self._model.get_sentence_embedding_dimension()
+            logger.info("Local model loaded: %d dimensions", self._dims)
+
+    def embed(self, text: str) -> list[float]:
+        """Generate an embedding for a single text string."""
+        self._load_model()
+        vec = self._model.encode(text, normalize_embeddings=True)
+        return vec.tolist()
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts."""
+        self._load_model()
+        vecs = self._model.encode(texts, normalize_embeddings=True, batch_size=32)
+        return [v.tolist() for v in vecs]
+
+
+class GeminiEmbeddingBackend:
+    """Gemini embedding backend using Google's API."""
+
+    def __init__(self) -> None:
+        from google import genai
+        self._client = genai.Client(api_key=settings.gemini_api_key)
         self._model = settings.gemini_embedding_model
-        self._dims: int = 0
-        self._faiss_index = None
-        self._faiss_ids: list[int] = []
+        self._dims = 0
 
     def embed(self, text: str) -> list[float]:
         """Generate an embedding for a single text string."""
@@ -82,6 +108,46 @@ class EmbeddingService:
         if self._dims == 0 and vectors:
             self._dims = len(vectors[0])
         return vectors
+
+
+def _create_backend():
+    """Create the appropriate embedding backend based on config."""
+    if settings.embedding_backend == "local":
+        return LocalEmbeddingBackend(settings.local_embedding_model)
+    return GeminiEmbeddingBackend()
+
+
+class EmbeddingService:
+    """Handles embedding generation and vector similarity search.
+
+    Supports Gemini and local (sentence-transformers) backends.
+    Attempts sqlite-vec first, falls back to FAISS, then brute-force numpy.
+    """
+
+    def __init__(self) -> None:
+        self._backend = _create_backend()
+        self._dims: int = 0
+        self._faiss_index = None
+        self._faiss_ids: list[int] = []
+
+        backend_name = type(self._backend).__name__
+        logger.info("Embedding backend: %s", backend_name)
+
+    def embed(self, text: str) -> list[float]:
+        """Generate an embedding for a single text string."""
+        vec = self._backend.embed(text)
+        if self._dims == 0:
+            self._dims = len(vec)
+        return vec
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts."""
+        if not texts:
+            return []
+        vecs = self._backend.embed_batch(texts)
+        if self._dims == 0 and vecs:
+            self._dims = len(vecs[0])
+        return vecs
 
     def store_embedding(self, db: Session, message_id: int, text: str, embedding: list[float]) -> Embedding:
         """Persist an embedding to the database."""
@@ -168,7 +234,7 @@ class EmbeddingService:
         if not rows:
             return
 
-        dims = self._dims or 768
+        dims = self._dims or 384
         index = faiss.IndexFlatIP(dims)
         vectors = []
         ids = []

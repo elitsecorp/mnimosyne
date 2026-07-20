@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 vec = ["sqlite-vec>=0.1.0"]
 faiss = ["faiss-cpu>=1.8.0"]
+local = ["sentence-transformers>=3.0.0"]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
