@@ -107,15 +107,22 @@ class MemoryEngine:
         )
         result = pipeline.run(db, message, conversation, query_vector=user_embedding)
 
-        # 4. Build LLM messages with pipeline context
+        # 4. Extract vector memories for prompt
+        vector_context = ""
+        if result.memory_result and result.memory_result.get("memories"):
+            vector_context = "\n".join(
+                f"- {m.get('text', '')[:200]}" for m in result.memory_result["memories"][:5]
+            )
+
+        # 5. Build LLM messages with pipeline context
         messages = build_chat_messages(
             conversation=conversation,
-            vector_memories="",
+            vector_memories=vector_context,
             ontology_facts=result.context,
             user_message=message,
         )
 
-        # 5. Call LLM
+        # 6. Call LLM
         response = self._llm.chat(messages)
 
         # 6. Store assistant message

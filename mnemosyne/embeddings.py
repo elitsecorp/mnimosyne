@@ -60,7 +60,7 @@ class LocalEmbeddingBackend:
             logger.info("Loading local embedding model: %s", self._model_name)
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer(self._model_name)
-            self._dims = self._model.get_sentence_embedding_dimension()
+            self._dims = self._model.get_embedding_dimension()
             logger.info("Local model loaded: %d dimensions", self._dims)
 
     def embed(self, text: str) -> list[float]:
@@ -253,15 +253,21 @@ class EmbeddingService:
         if not rows:
             return []
 
-        dims = self._dims or len(query_vec)
         query_np = np.array(query_vec, dtype=np.float32)
+        query_norm = np.linalg.norm(query_np)
         scores = []
 
         for row in rows:
-            vec = _deserialize_vector(row.embedding, dims)
-            vec_np = np.array(vec, dtype=np.float32)
-            sim = float(np.dot(query_np, vec_np) / (np.linalg.norm(query_np) * np.linalg.norm(vec_np) + 1e-10))
-            scores.append((row, sim))
+            try:
+                stored_dims = len(row.embedding) // 4
+                if stored_dims != len(query_vec):
+                    continue
+                vec = _deserialize_vector(row.embedding, stored_dims)
+                vec_np = np.array(vec, dtype=np.float32)
+                sim = float(np.dot(query_np, vec_np) / (query_norm * np.linalg.norm(vec_np) + 1e-10))
+                scores.append((row, sim))
+            except Exception:
+                continue
 
         scores.sort(key=lambda x: x[1], reverse=True)
         return [

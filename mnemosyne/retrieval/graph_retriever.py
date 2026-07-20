@@ -48,6 +48,8 @@ class GraphRetriever:
                 ent.match_score * ent.confidence,
             )
 
+        start_names = {ent.name for ent in resolved}
+
         for ent in resolved:
             if not self._graph.has_node(ent.name):
                 continue
@@ -58,6 +60,7 @@ class GraphRetriever:
                 entity_scores,
                 visited_edges,
                 result,
+                start_names,
             )
 
         for name, score in entity_scores.items():
@@ -73,8 +76,11 @@ class GraphRetriever:
         entity_scores: dict[str, float],
         visited_edges: set[tuple],
         result: GraphResult,
+        start_names: set[str] | None = None,
     ) -> None:
         """BFS from start entity, collecting relationships and scoring by distance."""
+        if start_names is None:
+            start_names = {start}
         queue: list[tuple[str, int]] = [(start, 0)]
         visited: set[str] = {start}
 
@@ -154,7 +160,7 @@ class GraphRetriever:
                     "name": name,
                     "type": attrs.get("type", ""),
                     "confidence": attrs.get("confidence", 0),
-                    "distance": 0 if name in {e.name for e in []} else 1,
+                    "distance": 0 if name in start_names else 1,
                 })
 
     def get_direct_facts(self, entity_name: str) -> list[dict]:

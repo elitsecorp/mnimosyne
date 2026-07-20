@@ -1,0 +1,67 @@
+[
+    {
+        "query": "Who is Max?",
+        "expected_entities": ["Max"],
+        "expected_query_type": "entity_lookup",
+        "min_entities": 1,
+        "description": "Simple entity lookup"
+    },
+    {
+        "query": "Tell me about Boeing",
+        "expected_entities": ["Boeing"],
+        "expected_relationships": [],
+        "expected_query_type": "entity_lookup",
+        "min_entities": 1,
+        "description": "Entity lookup with natural language"
+    },
+    {
+        "query": "Where does Alice work?",
+        "expected_entities": ["Alice"],
+        "expected_query_type": "relationship_query",
+        "min_entities": 1,
+        "min_relationships": 1,
+        "description": "Relationship query"
+    },
+    {
+        "query": "What is my dog's name?",
+        "expected_entities": ["Max"],
+        "expected_query_type": "fact_query",
+        "min_entities": 1,
+        "description": "Fact query about pet"
+    },
+    {
+        "query": "Tell me something about dogs",
+        "expected_query_type": "semantic_query",
+        "description": "Semantic search query"
+    },
+    {
+        "query": "What did we discuss last time?",
+        "expected_query_type": "conversation",
+        "description": "Conversation recall query"
+    },
+    {
+        "query": "Who works at Ethiopian Airlines?",
+        "expected_entities": ["Ethiopian Airlines"],
+        "expected_query_type": "relationship_query",
+        "min_entities": 1,
+        "min_relationships": 1,
+        "description": "Organization relationship query"
+    },
+    {
+        "query": "Tell me about the relationship between Alice and Boeing",
+        "expected_entities": ["Alice", "Boeing"],
+        "expected_query_type": "entity_lookup",
+        "min_entities": 2,
+        "description": "Multi-entity relationship query"
+    },
+    {
+        "query": "What is the capital of Ethiopia?",
+        "expected_query_type": "general",
+        "description": "General knowledge question"
+    },
+    {
+        "query": "Hello",
+        "expected_query_type": "general",
+        "description": "Greeting"
+    }
+]
