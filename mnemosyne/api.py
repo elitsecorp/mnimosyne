@@ -166,15 +166,19 @@ def get_session(session_id: int):
 
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: int):
-    """Delete a chat session and its messages."""
+    """Delete a chat session, its messages, and their embeddings."""
     from mnemosyne.database import get_session_factory
-    from mnemosyne.models import ChatSession, Message
+    from mnemosyne.models import ChatSession, Message, Embedding
     db = get_session_factory()()
     try:
         session = db.get(ChatSession, session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        db.query(Message).filter(Message.session_id == session_id).delete()
+
+        msg_ids = [m.id for m in db.query(Message.id).filter(Message.session_id == session_id).all()]
+        if msg_ids:
+            db.query(Embedding).filter(Embedding.message_id.in_(msg_ids)).delete(synchronize_session="fetch")
+        db.query(Message).filter(Message.session_id == session_id).delete(synchronize_session="fetch")
         db.delete(session)
         db.commit()
         return {"status": "deleted"}
