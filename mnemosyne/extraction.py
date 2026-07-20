@@ -34,7 +34,7 @@ def extract_memory(
         logger.warning("Empty extraction response from LLM")
         return ExtractionResult()
 
-    return _enforce_fact_coverage(result)
+    return _enforce_fact_coverage(_parse_extraction(raw))
 
 
 def _enforce_fact_coverage(result: ExtractionResult) -> ExtractionResult:
