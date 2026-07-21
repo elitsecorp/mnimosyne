@@ -12,3 +12,4 @@ build/
 .mypy_cache/
 .venv/
 debug_*.py
+debug_*.txt
