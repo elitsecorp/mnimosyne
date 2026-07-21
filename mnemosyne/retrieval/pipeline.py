@@ -108,9 +108,7 @@ class ContextPipeline:
             all_items.extend(fact_items)
 
         memory_result = None
-        use_vector = plan.query_type in ("semantic_query", "conversation", "general")
-
-        if use_vector and plan.vector_enabled:
+        if plan.vector_enabled:
             query_len = len(query.split())
             vec_top_k = 10 if query_len > 3 else 5
             min_sim = 0.6

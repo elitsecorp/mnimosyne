@@ -107,33 +107,31 @@ def health() -> HealthResponse:
 
 @app.post("/api/database/reset")
 def reset_database():
-    """Delete all data and reset the database."""
-    import os
-    from mnemosyne.config import settings
-    from mnemosyne.database import init_db
+    """Delete all data from the database."""
+    from mnemosyne.database import get_session_factory
+    from sqlalchemy import text
 
-    db_path = settings.database_url.replace("sqlite:///", "")
-    for suffix in ["", "-shm", "-wal"]:
-        path = db_path + suffix
-        if os.path.exists(path):
-            os.remove(path)
-            logger.info("Deleted: %s", path)
-
-    global _engine, _import_service
-    _engine = None
-    _import_service = None
-
-    init_db()
-
-    engine = get_engine()
-    db = get_session_factory()()
     try:
-        engine._graph.load_from_db(db)
-    finally:
-        db.close()
+        db = get_session_factory()()
+        try:
+            for table in ["embeddings", "facts", "relationships", "entities", "messages", "chat_sessions"]:
+                db.execute(text(f"DELETE FROM {table}"))
+            db.commit()
+        finally:
+            db.close()
 
-    logger.info("Database reset complete")
-    return {"status": "reset", "message": "All data deleted. Server restarted with fresh database."}
+        global _engine, _import_service
+        if _engine:
+            db2 = get_session_factory()()
+            try:
+                _engine._graph.load_from_db(db2)
+            finally:
+                db2.close()
+
+        return {"status": "reset", "message": "All data deleted."}
+    except Exception as e:
+        logger.error("Reset failed: %s", e)
+        return {"status": "error", "message": str(e)}
 
 
 @app.post("/api/sessions", response_model=SessionOut)
