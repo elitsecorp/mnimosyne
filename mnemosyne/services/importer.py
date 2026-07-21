@@ -132,7 +132,7 @@ class ImportService:
             logger.error("Import %s failed: %s", job.id, e)
 
     def _process_chunk(self, job: ImportJob, chunk: str) -> None:
-        """Process a single text chunk: store, embed, extract."""
+        """Process a single text chunk: store, embed, extract using OpenIE (zero cost)."""
         db = self._engine._session_factory()
         try:
             msg = Message(role="imported", content=chunk)
@@ -144,42 +144,37 @@ class ImportService:
             self._engine._embeddings.store_embedding(db, msg.id, chunk, embedding)
             job.embeddings_created += 1
 
-            extraction = extract_memory(self._engine._llm, chunk, chunk)
+            from mnemosyne.services.openie import extract_triples
+            result = extract_triples(chunk)
 
-            for ent in extraction.entities:
-                existing = db.query(Entity).filter_by(name=ent.name).first()
+            for ent in result.entities:
+                existing = db.query(Entity).filter_by(name=ent["name"]).first()
                 if existing:
-                    if ent.confidence > existing.confidence:
-                        existing.type = ent.type
-                        existing.confidence = ent.confidence
+                    if ent["confidence"] > existing.confidence:
+                        existing.type = ent["type"]
+                        existing.confidence = ent["confidence"]
                 else:
-                    db.add(Entity(name=ent.name, type=ent.type, confidence=ent.confidence))
+                    db.add(Entity(name=ent["name"], type=ent["type"], confidence=ent["confidence"]))
                 job.entities_extracted += 1
 
-            for rel in extraction.relationships:
+            for triple in result.triples:
                 existing = db.query(Relationship).filter_by(
-                    subject=rel.subject, predicate=rel.predicate, object=rel.object,
+                    subject=triple.subject, predicate=triple.predicate, object=triple.object,
                 ).first()
                 if not existing:
                     db.add(Relationship(
-                        subject=rel.subject,
-                        predicate=rel.predicate,
-                        object=rel.object,
-                        confidence=rel.confidence,
+                        subject=triple.subject,
+                        predicate=triple.predicate,
+                        object=triple.object,
+                        confidence=triple.confidence,
+                    ))
+                    db.add(Fact(
+                        subject=triple.subject,
+                        predicate=triple.predicate,
+                        object=triple.object,
+                        source_message=triple.source_message[:500] if triple.source_message else chunk[:500],
                     ))
                 job.relationships_extracted += 1
-
-            for fact in extraction.facts:
-                existing = db.query(Fact).filter_by(
-                    subject=fact.subject, predicate=fact.predicate, object=fact.object,
-                ).first()
-                if not existing:
-                    db.add(Fact(
-                        subject=fact.subject,
-                        predicate=fact.predicate,
-                        object=fact.object,
-                        source_message=chunk[:500],
-                    ))
 
             db.commit()
         finally:
