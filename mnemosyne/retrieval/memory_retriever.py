@@ -54,10 +54,13 @@ class MemoryRetriever:
 
         memories = []
         for r in selected:
+            text = r.get("text", "")
+            if text.strip().lower() == query.strip().lower():
+                continue
             memories.append({
                 "id": r["id"],
                 "message_id": r["message_id"],
-                "text": r["text"],
+                "text": text,
                 "score": r.get("score", 0),
             })
 

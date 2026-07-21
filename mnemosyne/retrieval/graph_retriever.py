@@ -29,6 +29,12 @@ class GraphRetriever:
     def __init__(self, graph: nx.DiGraph) -> None:
         self._graph = graph
 
+    _GENERIC_PREDICATES = frozenset({
+        "sent_message", "interacted_with", "replied_to", "sent", "shared",
+        "message", "asked_about", "asked", "talked_about", "talked",
+        "mentioned", "wrote", "posted", "said", "told",
+    })
+
     def retrieve(
         self,
         resolved: list[ResolvedEntity],
@@ -98,6 +104,8 @@ class GraphRetriever:
                     continue
                 if conf < min_confidence:
                     continue
+                if pred.lower() in self._GENERIC_PREDICATES:
+                    continue
 
                 visited_edges.add(edge_key)
                 distance = depth + 1
@@ -129,6 +137,8 @@ class GraphRetriever:
                 if edge_key in visited_edges:
                     continue
                 if conf < min_confidence:
+                    continue
+                if pred.lower() in self._GENERIC_PREDICATES:
                     continue
 
                 visited_edges.add(edge_key)

@@ -62,6 +62,8 @@ class EntityResolver:
         self._entities = db.query(Entity).all()
         self._name_map = {e.name.lower(): e for e in self._entities}
 
+    _NOISE_NAMES = frozenset({"i", "u", "h", "hi", "ok", "yes", "no", "hey", "lol", "omg"})
+
     def resolve(self, query: str, limit: int = 10) -> list[ResolvedEntity]:
         """Resolve entity mentions in the query to ranked candidates."""
         candidates: dict[int, ResolvedEntity] = {}
@@ -69,6 +71,11 @@ class EntityResolver:
         query_tokens = _tokenize(query)
 
         for entity in self._entities:
+            if entity.name.lower() in self._NOISE_NAMES:
+                continue
+            if len(entity.name) < 2:
+                continue
+
             score, method = self._score_entity(entity, query_lower, query_tokens)
             if score > 0:
                 existing = candidates.get(entity.id)
