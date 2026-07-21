@@ -105,6 +105,37 @@ def health() -> HealthResponse:
     return HealthResponse()
 
 
+@app.post("/api/database/reset")
+def reset_database():
+    """Delete all data and reset the database."""
+    import os
+    from mnemosyne.config import settings
+    from mnemosyne.database import init_db
+
+    db_path = settings.database_url.replace("sqlite:///", "")
+    for suffix in ["", "-shm", "-wal"]:
+        path = db_path + suffix
+        if os.path.exists(path):
+            os.remove(path)
+            logger.info("Deleted: %s", path)
+
+    global _engine, _import_service
+    _engine = None
+    _import_service = None
+
+    init_db()
+
+    engine = get_engine()
+    db = get_session_factory()()
+    try:
+        engine._graph.load_from_db(db)
+    finally:
+        db.close()
+
+    logger.info("Database reset complete")
+    return {"status": "reset", "message": "All data deleted. Server restarted with fresh database."}
+
+
 @app.post("/api/sessions", response_model=SessionOut)
 def create_session(req: SessionCreate):
     """Create a new chat session."""

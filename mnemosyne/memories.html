@@ -46,6 +46,7 @@
             <a href="/graph-explorer">Graph</a>
             <a href="/importer">Import</a>
             <a href="/consolidate">Consolidate</a>
+            <a href="#" onclick="resetDatabase()" style="color:#e94560;">Reset DB</a>
         </nav>
     </header>
     <div class="stats-bar" id="stats-bar">
@@ -168,6 +169,19 @@
             });
             html += '</tbody></table>';
             content.innerHTML = html;
+        }
+
+        async function resetDatabase() {
+            if (!confirm('This will delete ALL data. Continue?')) return;
+            if (!confirm('Are you absolutely sure? This cannot be undone.')) return;
+            try {
+                const res = await fetch('/api/database/reset', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || 'Database reset. Reloading...');
+                location.reload();
+            } catch (e) {
+                alert('Reset failed: ' + e.message);
+            }
         }
 
         function esc(s) {
