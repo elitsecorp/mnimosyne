@@ -105,7 +105,7 @@ class MemoryEngine:
             self._graph,
             max_hops=2,
             min_confidence=0.0,
-            token_budget=4000,
+            token_budget=8000,
         )
         result = pipeline.run(db, message, conversation, query_vector=user_embedding)
 

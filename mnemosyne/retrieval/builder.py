@@ -38,31 +38,34 @@ class ContextBuilder:
 
         if entities:
             lines = []
-            for item in entities[:15]:
+            for item in entities[:25]:
                 e = item.item
-                lines.append(f"- {e['name']} (type: {e.get('type', 'unknown')})")
+                conf = e.get('confidence', 0)
+                lines.append(f"- {e['name']} (type: {e.get('type', 'unknown')}, confidence: {conf:.2f})")
             sections.append("Entities:\n" + "\n".join(lines))
 
         if relationships:
             lines = []
-            for item in relationships[:20]:
+            for item in relationships[:30]:
                 r = item.item
-                lines.append(f"- {r['subject']} {r['predicate']} {r['object']}")
+                conf = r.get('confidence', 0)
+                lines.append(f"- {r['subject']} {r['predicate']} {r['object']} (confidence: {conf:.2f})")
             sections.append("Relationships:\n" + "\n".join(lines))
 
         if facts:
             lines = []
-            for item in facts[:15]:
+            for item in facts[:20]:
                 f = item.item
                 lines.append(f"- {f['subject']} {f['predicate']} {f['object']}")
             sections.append("Facts:\n" + "\n".join(lines))
 
         if memories:
             lines = []
-            for item in memories[:5]:
+            for item in memories[:10]:
                 m = item.item
-                text = m.get("text", "")[:200]
-                lines.append(f"- \"{text}\"")
+                score = m.get("score", 0)
+                text = m.get("text", "")[:400]
+                lines.append(f"- [score: {score:.2f}] {text}")
             sections.append("Relevant conversations:\n" + "\n".join(lines))
 
         if not sections:
