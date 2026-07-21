@@ -132,7 +132,7 @@ class ImportService:
             logger.error("Import %s failed: %s", job.id, e)
 
     def _process_chunk(self, job: ImportJob, chunk: str) -> None:
-        """Process a single text chunk: store, embed, extract using OpenIE (zero cost)."""
+        """Process a single text chunk: store and embed only (no ontology extraction)."""
         db = self._engine._session_factory()
         try:
             msg = Message(role="imported", content=chunk)
@@ -143,38 +143,6 @@ class ImportService:
             embedding = self._engine._embeddings.embed(chunk)
             self._engine._embeddings.store_embedding(db, msg.id, chunk, embedding)
             job.embeddings_created += 1
-
-            from mnemosyne.services.openie import extract_triples
-            result = extract_triples(chunk)
-
-            for ent in result.entities:
-                existing = db.query(Entity).filter_by(name=ent["name"]).first()
-                if existing:
-                    if ent["confidence"] > existing.confidence:
-                        existing.type = ent["type"]
-                        existing.confidence = ent["confidence"]
-                else:
-                    db.add(Entity(name=ent["name"], type=ent["type"], confidence=ent["confidence"]))
-                job.entities_extracted += 1
-
-            for triple in result.triples:
-                existing = db.query(Relationship).filter_by(
-                    subject=triple.subject, predicate=triple.predicate, object=triple.object,
-                ).first()
-                if not existing:
-                    db.add(Relationship(
-                        subject=triple.subject,
-                        predicate=triple.predicate,
-                        object=triple.object,
-                        confidence=triple.confidence,
-                    ))
-                    db.add(Fact(
-                        subject=triple.subject,
-                        predicate=triple.predicate,
-                        object=triple.object,
-                        source_message=triple.source_sentence[:500] if triple.source_sentence else chunk[:500],
-                    ))
-                job.relationships_extracted += 1
 
             db.commit()
         finally:
