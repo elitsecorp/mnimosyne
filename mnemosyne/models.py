@@ -74,6 +74,7 @@ class Relationship(Base):
     predicate: Mapped[str] = mapped_column(String(128), nullable=False)
     object: Mapped[str] = mapped_column(String(256), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    is_owner: Mapped[bool] = mapped_column(Integer, default=0)
 
 
 class Fact(Base):

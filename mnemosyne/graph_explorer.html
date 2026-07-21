@@ -54,6 +54,7 @@
                 <input type="text" id="search" placeholder="Search entities...">
                 <button onclick="searchNodes()">Search</button>
                 <button onclick="resetView()">Reset</button>
+                <button onclick="loadOwnerGraph()" style="background:#e94560;color:#fff;">Owner</button>
             </div>
             <div class="filter-bar">
                 <select id="type-filter" onchange="applyFilter()">
@@ -93,6 +94,31 @@
             initCytoscape();
             loadTypes();
             updateStats();
+        }
+
+        async function loadOwnerGraph() {
+            try {
+                const res = await fetch('/api/owner/graph');
+                const data = await res.json();
+                if (!data.owner) {
+                    alert('No Owner entity found. Run consolidation first.');
+                    return;
+                }
+                allNodes = data.nodes;
+                allEdges = data.edges.map((e, i) => ({
+                    id: i,
+                    source: allNodes.findIndex(n => n.name === e.subject),
+                    target: allNodes.findIndex(n => n.name === e.object),
+                    predicate: e.predicate,
+                    confidence: e.confidence
+                })).filter(e => e.source >= 0 && e.target >= 0);
+
+                if (cy) cy.destroy();
+                initCytoscape();
+                document.getElementById('stats').textContent = `Owner Graph: ${allNodes.length} nodes, ${allEdges.length} edges`;
+            } catch (e) {
+                console.error('Failed to load owner graph:', e);
+            }
         }
 
         function initCytoscape() {

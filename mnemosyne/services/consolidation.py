@@ -64,6 +64,8 @@ class ConsolidationService:
 
             _last_report = recommendations
 
+            owner_result = self._compile_owner(db)
+
             summary = {
                 "duplicate_entities": sum(1 for r in recommendations if r["type"] == "duplicate_entity"),
                 "normalize_relationships": sum(1 for r in recommendations if r["type"] == "normalize_relationship"),
@@ -71,6 +73,7 @@ class ConsolidationService:
                 "orphans": sum(1 for r in recommendations if r["type"] == "orphan"),
                 "unsupported_relationships": sum(1 for r in recommendations if r["type"] == "unsupported_relationship"),
                 "confidence_changes": sum(1 for r in recommendations if r["type"] == "confidence_change"),
+                "owner_connections": owner_result.get("connections_stored", 0),
             }
 
             return {"recommendations": recommendations, "summary": summary}
@@ -442,3 +445,15 @@ class ConsolidationService:
         if rel:
             db.delete(rel)
             logger.info("Deleted unsupported relationship: %s %s %s", subject, predicate, obj)
+
+    def _compile_owner(self, db: Session) -> dict:
+        """Run the Owner Compiler to connect concepts to the Owner."""
+        try:
+            from mnemosyne.services.owner_compiler import OwnerCompiler
+            compiler = OwnerCompiler()
+            result = compiler.compile(db)
+            logger.info("Owner compilation: %s", result)
+            return result
+        except Exception as e:
+            logger.error("Owner compilation failed: %s", e)
+            return {"owner": None, "connections_found": 0, "connections_stored": 0}

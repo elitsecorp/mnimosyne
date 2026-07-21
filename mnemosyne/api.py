@@ -418,6 +418,43 @@ def serve_cytoscape():
     return FileResponse(js_path, media_type="application/javascript")
 
 
+# --- Owner Graph API ---
+
+
+@app.get("/api/owner/graph")
+def get_owner_graph():
+    """Get the Owner subgraph for visualization."""
+    from mnemosyne.services.owner_compiler import OwnerCompiler
+    from mnemosyne.database import get_session_factory
+    db = get_session_factory()()
+    try:
+        compiler = OwnerCompiler()
+        return compiler.get_owner_graph(db)
+    finally:
+        db.close()
+
+
+@app.get("/api/owner/entity")
+def get_owner_entity():
+    """Get the Owner entity details."""
+    from mnemosyne.models import Entity
+    from mnemosyne.database import get_session_factory
+    db = get_session_factory()()
+    try:
+        owner = db.query(Entity).filter(Entity.name == "Owner").first()
+        if not owner:
+            return {"found": False}
+        return {
+            "found": True,
+            "id": owner.id,
+            "name": owner.name,
+            "type": owner.type,
+            "confidence": owner.confidence,
+        }
+    finally:
+        db.close()
+
+
 # --- Graph Explorer API ---
 
 

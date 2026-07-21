@@ -63,6 +63,7 @@ def init_db() -> None:
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
     _migrate_add_session_id(engine)
+    _migrate_add_is_owner(engine)
     logger.info("Database initialized.")
 
 
@@ -83,6 +84,19 @@ def _migrate_add_session_id(engine) -> None:
             conn.execute(text("ALTER TABLE messages ADD COLUMN session_id INTEGER REFERENCES chat_sessions(id)"))
             conn.execute(text("UPDATE messages SET session_id = (SELECT id FROM chat_sessions LIMIT 1) WHERE session_id IS NULL"))
         logger.info("Migration complete: session_id added")
+
+
+def _migrate_add_is_owner(engine) -> None:
+    """Add is_owner to relationships table if missing."""
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    if "relationships" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("relationships")]
+        if "is_owner" not in columns:
+            logger.info("Migrating: adding is_owner to relationships table")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE relationships ADD COLUMN is_owner INTEGER DEFAULT 0"))
+            logger.info("Migration complete: is_owner added")
 
 
 def load_schema_sql() -> str:
