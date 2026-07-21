@@ -19,7 +19,8 @@ class MemoryResult:
 class MemoryRetriever:
     """Retrieves semantically similar past messages using vector search.
 
-    Only used when graph retrieval alone is insufficient.
+    Always returns top_k results, prioritizing those above the similarity
+    threshold but filling with best remaining if fewer match.
     """
 
     def __init__(self, embeddings: EmbeddingService) -> None:
@@ -35,23 +36,29 @@ class MemoryRetriever:
     ) -> MemoryResult:
         """Search for semantically similar past messages.
 
-        Args:
-            query_vector: Pre-computed embedding to avoid duplicate API call.
+        Always returns up to top_k results. Prioritizes results above
+        min_similarity, but fills remaining slots with best available.
         """
         if not query.strip():
             return MemoryResult()
 
-        raw_results = self._embeddings.search(db, query, top_k=top_k, query_vector=query_vector)
+        raw_results = self._embeddings.search(db, query, top_k=top_k * 2, query_vector=query_vector)
+
+        above_threshold = [r for r in raw_results if r.get("score", 0) >= min_similarity]
+
+        if len(above_threshold) >= top_k:
+            selected = above_threshold[:top_k]
+        else:
+            remaining = [r for r in raw_results if r not in above_threshold]
+            selected = above_threshold + remaining[:top_k - len(above_threshold)]
 
         memories = []
-        for r in raw_results:
-            score = r.get("score", 0)
-            if score >= min_similarity:
-                memories.append({
-                    "id": r["id"],
-                    "message_id": r["message_id"],
-                    "text": r["text"],
-                    "score": score,
-                })
+        for r in selected:
+            memories.append({
+                "id": r["id"],
+                "message_id": r["message_id"],
+                "text": r["text"],
+                "score": r.get("score", 0),
+            })
 
         return MemoryResult(memories=memories)
