@@ -161,7 +161,7 @@ class EmbeddingService:
         db.refresh(record)
         return record
 
-    def search(self, db: Session, query: str, top_k: int = 5, query_vector: list[float] | None = None) -> list[dict]:
+    def search(self, db: Session, query: str, top_k: int = 10, query_vector: list[float] | None = None) -> list[dict]:
         """Search for the most similar stored embeddings.
 
         Args:

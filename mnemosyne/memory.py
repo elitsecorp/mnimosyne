@@ -255,7 +255,7 @@ class MemoryEngine:
 
         db.commit()
 
-    def search_memory(self, query: str, top_k: int = 5) -> list[dict]:
+    def search_memory(self, query: str, top_k: int = 10) -> list[dict]:
         """Search vector memory for relevant past messages."""
         db = self._session_factory()
         try:

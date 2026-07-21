@@ -24,7 +24,7 @@ class RetrievalService:
         self._graph = graph
         self._pipeline = ContextPipeline(embeddings, graph)
 
-    def retrieve(self, db: Session, query: str, top_k: int = 5) -> dict:
+    def retrieve(self, db: Session, query: str, top_k: int = 10) -> dict:
         """Run the deterministic pipeline and return results in legacy format."""
         result = self._pipeline.run(db, query)
 
