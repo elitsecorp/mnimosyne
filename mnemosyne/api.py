@@ -48,6 +48,7 @@ app = FastAPI(
 )
 
 _engine: MemoryEngine | None = None
+_import_service = None
 
 
 def get_engine() -> MemoryEngine:
@@ -56,6 +57,15 @@ def get_engine() -> MemoryEngine:
     if _engine is None:
         _engine = MemoryEngine()
     return _engine
+
+
+def get_import_service():
+    """Return the singleton ImportService, creating it on first call."""
+    global _import_service
+    if _import_service is None:
+        from mnemosyne.services.importer import ImportService
+        _import_service = ImportService(engine=get_engine())
+    return _import_service
 
 
 @app.on_event("startup")
@@ -526,8 +536,7 @@ def graph_stats():
 @app.post("/api/import/text")
 def import_text(req: ImportRequest):
     """Start a text import job."""
-    from mnemosyne.services.importer import ImportService
-    svc = ImportService(engine=get_engine())
+    svc = get_import_service()
     job_id = svc.import_text(req.text)
     return {"job_id": job_id, "status": "running"}
 
@@ -535,10 +544,9 @@ def import_text(req: ImportRequest):
 @app.post("/api/import/file")
 async def import_file(file: UploadFile = File(...)):
     """Start a file import job."""
-    from mnemosyne.services.importer import ImportService
     content = await file.read()
     text = content.decode("utf-8", errors="replace")
-    svc = ImportService(engine=get_engine())
+    svc = get_import_service()
     job_id = svc.import_file(file.filename or "unknown", text, file.content_type or "text/plain")
     return {"job_id": job_id, "status": "running"}
 
@@ -546,8 +554,7 @@ async def import_file(file: UploadFile = File(...)):
 @app.get("/api/import/job/{job_id}")
 def import_job_status(job_id: str):
     """Get import job status and progress."""
-    from mnemosyne.services.importer import ImportService
-    svc = ImportService(engine=get_engine())
+    svc = get_import_service()
     result = svc.get_job(job_id)
     if not result:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -557,8 +564,7 @@ def import_job_status(job_id: str):
 @app.post("/api/import/cancel/{job_id}")
 def import_cancel(job_id: str):
     """Cancel a running import job."""
-    from mnemosyne.services.importer import ImportService
-    svc = ImportService(engine=get_engine())
+    svc = get_import_service()
     cancelled = svc.cancel_job(job_id)
     if not cancelled:
         raise HTTPException(status_code=404, detail="Job not found or already completed")

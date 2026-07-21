@@ -74,10 +74,12 @@
             <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
             <div id="progress-text" style="font-size:0.85rem;color:#888;">Preparing...</div>
             <div class="stats-grid">
-                <div class="stat-box"><div class="num" id="s-chunks">0</div><div class="lbl">Chunks</div></div>
-                <div class="stat-box"><div class="num" id="s-entities">0</div><div class="lbl">Entities</div></div>
+                <div class="stat-box"><div class="num" id="s-chunks">0</div><div class="lbl">Chunks Processed</div></div>
+                <div class="stat-box"><div class="num" id="s-entities">0</div><div class="lbl">Entities Found</div></div>
                 <div class="stat-box"><div class="num" id="s-rels">0</div><div class="lbl">Relationships</div></div>
+                <div class="stat-box"><div class="num" id="s-embeddings">0</div><div class="lbl">Embeddings</div></div>
             </div>
+            <div id="chunk-detail" style="font-size:0.8rem;color:#888;margin-top:8px;"></div>
             <div class="actions" style="margin-top:12px;">
                 <button class="btn-danger" id="cancel-btn" onclick="cancelJob()">Cancel</button>
             </div>
@@ -139,10 +141,18 @@
         function updateUI(data) {
             const pct = data.total_chunks > 0 ? (data.processed_chunks / data.total_chunks * 100) : 0;
             document.getElementById('progress-fill').style.width = pct + '%';
-            document.getElementById('progress-text').textContent = `${data.processed_chunks} / ${data.total_chunks} chunks`;
+            document.getElementById('progress-text').textContent = `${data.processed_chunks} / ${data.total_chunks} chunks (${Math.round(pct)}%)`;
             document.getElementById('s-chunks').textContent = data.processed_chunks;
             document.getElementById('s-entities').textContent = data.entities_extracted;
             document.getElementById('s-rels').textContent = data.relationships_extracted;
+            document.getElementById('s-embeddings').textContent = data.embeddings_created;
+
+            const detail = document.getElementById('chunk-detail');
+            if (data.status === 'running') {
+                detail.textContent = `Processing chunk ${data.processed_chunks + 1} of ${data.total_chunks}...`;
+            } else if (data.status === 'completed') {
+                detail.textContent = `Done! ${data.entities_extracted} entities, ${data.relationships_extracted} relationships, ${data.embeddings_created} embeddings created.`;
+            }
 
             const badge = document.getElementById('status-badge');
             badge.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
