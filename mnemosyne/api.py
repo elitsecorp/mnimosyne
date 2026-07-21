@@ -469,11 +469,17 @@ def get_owner_entity():
 
 
 @app.get("/api/graph/seed")
-def graph_seed(limit: int = 30):
-    """Get initial graph seed for Cytoscape.js."""
+def graph_seed(limit: int = 30, after_date: str | None = None, before_date: str | None = None):
+    """Get initial graph seed for Cytoscape.js.
+
+    Args:
+        limit: Maximum entities to return.
+        after_date: Only include entities with facts after this date (YYYY-MM-DD).
+        before_date: Only include entities with facts before this date (YYYY-MM-DD).
+    """
     from mnemosyne.services.graph_explorer import GraphExplorerService
     svc = GraphExplorerService()
-    return svc.get_initial_graph(limit=limit)
+    return svc.get_initial_graph(limit=limit, after_date=after_date, before_date=before_date)
 
 
 @app.get("/api/graph/search")

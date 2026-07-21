@@ -62,6 +62,10 @@
                 </select>
                 <label style="font-size:0.75rem;color:#888;">Min conf:</label>
                 <input type="range" id="conf-filter" min="0" max="100" value="0" onchange="applyFilter()" style="width:80px;">
+                <label style="font-size:0.75rem;color:#888;">After:</label>
+                <input type="date" id="date-after" onchange="applyDateFilter()" style="font-size:0.75rem;padding:2px 4px;">
+                <label style="font-size:0.75rem;color:#888;">Before:</label>
+                <input type="date" id="date-before" onchange="applyDateFilter()" style="font-size:0.75rem;padding:2px 4px;">
             </div>
             <div id="cy"></div>
             <div class="stats" id="stats">Loading...</div>
@@ -309,6 +313,39 @@
             cy.edges().forEach(e => {
                 if (e.source().hasClass('dimmed') || e.target().hasClass('dimmed')) e.addClass('dimmed');
             });
+        }
+
+        async function applyDateFilter() {
+            const after = document.getElementById('date-after').value;
+            const before = document.getElementById('date-before').value;
+
+            if (!after && !before) {
+                loadGraph();
+                return;
+            }
+
+            let url = '/api/graph/seed?limit=50';
+            if (after) url += `&after_date=${after}`;
+            if (before) url += `&before_date=${before}`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                allNodes = data.nodes;
+                allEdges = data.edges.map((e, i) => ({
+                    id: i,
+                    source: allNodes.findIndex(n => n.name === e.subject),
+                    target: allNodes.findIndex(n => n.name === e.object),
+                    predicate: e.predicate,
+                    confidence: e.confidence
+                })).filter(e => e.source >= 0 && e.target >= 0);
+
+                if (cy) cy.destroy();
+                initCytoscape();
+                document.getElementById('stats').textContent = `Date filter: ${allNodes.length} nodes, ${allEdges.length} edges`;
+            } catch (e) {
+                console.error('Failed to load date-filtered graph:', e);
+            }
         }
 
         function updateStats() {

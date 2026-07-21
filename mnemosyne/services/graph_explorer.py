@@ -22,19 +22,25 @@ class GraphExplorerService:
     def __init__(self) -> None:
         self._session_factory = get_session_factory()
 
-    def get_initial_graph(self, limit: int = 30) -> dict:
+    def get_initial_graph(self, limit: int = 30, after_date: str | None = None, before_date: str | None = None) -> dict:
         """Return a seed graph of top entities by confidence and edges between them.
 
-        This is the initial view loaded by Cytoscape.js.
+        Args:
+            limit: Maximum number of entities to include.
+            after_date: Only include entities with facts after this date (YYYY-MM-DD).
+            before_date: Only include entities with facts before this date (YYYY-MM-DD).
         """
         db = self._session_factory()
         try:
-            entities = (
-                db.query(Entity)
-                .order_by(Entity.confidence.desc())
-                .limit(limit)
-                .all()
-            )
+            if after_date or before_date:
+                entities = self._get_entities_by_date(db, limit, after_date, before_date)
+            else:
+                entities = (
+                    db.query(Entity)
+                    .order_by(Entity.confidence.desc())
+                    .limit(limit)
+                    .all()
+                )
             entity_names = {e.name for e in entities}
             entity_id_map = {e.name: e.id for e in entities}
 
@@ -77,6 +83,39 @@ class GraphExplorerService:
             return {"nodes": nodes, "edges": edges}
         finally:
             db.close()
+
+    def _get_entities_by_date(self, db: Session, limit: int, after_date: str | None, before_date: str | None) -> list:
+        """Get entities that have facts within the specified date range."""
+        from datetime import datetime
+
+        fact_query = db.query(Fact.subject).distinct()
+
+        if after_date:
+            try:
+                after_dt = datetime.fromisoformat(after_date)
+                fact_query = fact_query.filter(Fact.timestamp >= after_dt)
+            except ValueError:
+                pass
+
+        if before_date:
+            try:
+                before_dt = datetime.fromisoformat(before_date)
+                fact_query = fact_query.filter(Fact.timestamp <= before_dt)
+            except ValueError:
+                pass
+
+        entity_names = {row[0] for row in fact_query.all()}
+
+        if not entity_names:
+            return []
+
+        return (
+            db.query(Entity)
+            .filter(Entity.name.in_(entity_names))
+            .order_by(Entity.confidence.desc())
+            .limit(limit)
+            .all()
+        )
 
     def search_entities(self, query: str, limit: int = 20) -> list[dict]:
         """Search entities by name substring (case-insensitive)."""
