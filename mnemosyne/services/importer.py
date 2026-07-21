@@ -19,8 +19,8 @@ from mnemosyne.models import Embedding, Entity, Fact, Message, Relationship
 
 logger = logging.getLogger(__name__)
 
-MAX_CHUNK_SIZE = 500
-MIN_CHUNK_SIZE = 50
+MAX_CHUNK_SIZE = 1500
+MIN_CHUNK_SIZE = 100
 _paragraph_split = re.compile(r"\n\s*\n")
 _sentence_split = re.compile(r"(?<=[.!?])\s+")
 

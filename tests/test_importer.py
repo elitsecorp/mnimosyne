@@ -16,28 +16,28 @@ class TestChunkText:
         assert chunks[0] == "Hello world."
 
     def test_paragraph_split(self):
-        text = "A. " * 200 + "\n\n" + "B. " * 200
+        text = "A. " * 600 + "\n\n" + "B. " * 600
         chunks = ImportService._chunk_text(text)
         assert len(chunks) >= 2
 
     def test_sentence_split_long_paragraph(self):
-        long_para = "Sent one. " * 60
+        long_para = "Sent one. " * 200
         chunks = ImportService._chunk_text(long_para)
         for chunk in chunks:
-            assert len(chunk) <= 500
+            assert len(chunk) <= 1500
 
     def test_very_long_sentence(self):
-        long_sent = "word " * 200
+        long_sent = "word " * 500
         chunks = ImportService._chunk_text(long_sent)
         for chunk in chunks:
-            assert len(chunk) <= 500
+            assert len(chunk) <= 1500
 
     def test_empty_text(self):
         chunks = ImportService._chunk_text("")
         assert len(chunks) >= 1
 
     def test_skips_empty_paragraphs(self):
-        text = ("A. " * 200) + "\n\n\n\n" + ("B. " * 200)
+        text = ("A. " * 600) + "\n\n\n\n" + ("B. " * 600)
         chunks = ImportService._chunk_text(text)
         assert len(chunks) >= 2
 
