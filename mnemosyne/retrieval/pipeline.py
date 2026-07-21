@@ -111,7 +111,7 @@ class ContextPipeline:
         if plan.vector_enabled:
             mem_retriever = MemoryRetriever(self._embeddings)
             memory_result = mem_retriever.retrieve(
-                db, query, top_k=10, min_similarity=0.0, query_vector=query_vector,
+                db, query, top_k=10, min_similarity=0.3, query_vector=query_vector,
             )
             ranker = Ranker(self._weights)
             mem_items = ranker.rank_memories(memory_result.memories, plan.detected_entities)

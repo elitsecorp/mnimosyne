@@ -112,8 +112,10 @@ class MemoryEngine:
         # 4. Extract vector memories for prompt
         vector_context = ""
         if result.memory_result and result.memory_result.get("memories"):
+            memories = result.memory_result["memories"]
             vector_context = "\n".join(
-                f"- {m.get('text', '')[:200]}" for m in result.memory_result["memories"][:5]
+                f"- [{m.get('score', 0):.2f}] {m.get('text', '')[:300]}"
+                for m in memories[:10]
             )
 
         # 5. Build LLM messages with pipeline context
