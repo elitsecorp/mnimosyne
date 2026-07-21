@@ -108,10 +108,19 @@ class ContextPipeline:
             all_items.extend(fact_items)
 
         memory_result = None
-        if plan.vector_enabled:
+        use_vector = (
+            plan.query_type in ("semantic_query", "conversation")
+            or len([i for i in all_items if i.item_type in ("relationship", "fact")]) < 3
+        )
+
+        if use_vector and plan.vector_enabled:
+            query_len = len(query.split())
+            vec_top_k = 10 if query_len > 3 else 5
+            min_sim = 0.6
+
             mem_retriever = MemoryRetriever(self._embeddings)
             memory_result = mem_retriever.retrieve(
-                db, query, top_k=10, min_similarity=0.3, query_vector=query_vector,
+                db, query, top_k=vec_top_k, min_similarity=min_sim, query_vector=query_vector,
             )
             ranker = Ranker(self._weights)
             mem_items = ranker.rank_memories(memory_result.memories, plan.detected_entities)
