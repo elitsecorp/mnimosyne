@@ -172,7 +172,7 @@ class ImportService:
                         subject=triple.subject,
                         predicate=triple.predicate,
                         object=triple.object,
-                        source_message=triple.source_message[:500] if triple.source_message else chunk[:500],
+                        source_message=triple.source_sentence[:500] if triple.source_sentence else chunk[:500],
                     ))
                 job.relationships_extracted += 1
 
