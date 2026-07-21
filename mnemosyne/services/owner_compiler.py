@@ -107,13 +107,18 @@ class OwnerCompiler:
 
     def _find_or_create_owner(self, db: Session) -> str:
         """Find or create the Owner entity."""
-        for name in ["Owner", "User"]:
-            ent = db.query(Entity).filter_by(name=name).first()
-            if ent:
-                return ent.name
+        owner = db.query(Entity).filter_by(name="Owner").first()
+        if owner:
+            return "Owner"
 
-        owner = Entity(name="Owner", type="person", confidence=1.0)
-        db.add(owner)
+        user = db.query(Entity).filter_by(name="User").first()
+        if user:
+            user.name = "Owner"
+            db.commit()
+            return "Owner"
+
+        new_owner = Entity(name="Owner", type="person", confidence=1.0)
+        db.add(new_owner)
         db.commit()
         logger.info("Created Owner entity")
         return "Owner"

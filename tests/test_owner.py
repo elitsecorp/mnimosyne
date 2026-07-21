@@ -43,7 +43,9 @@ class TestOwnerIdentification:
         db_session.add(Entity(name="User", type="person", confidence=0.9))
         db_session.commit()
         result = compiler.compile(db_session)
-        assert result["owner"] == "User"
+        assert result["owner"] == "Owner"
+        owner = db_session.query(Entity).filter_by(name="Owner").first()
+        assert owner is not None
 
 
 class TestOwnerConnections:
