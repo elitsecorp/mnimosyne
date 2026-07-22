@@ -365,6 +365,7 @@ ${rels}</pre></div>`);
             }
             if (meta.stats) {
                 const s = meta.stats;
+                const v2g = s.vector_to_graph || {};
                 const stats = [
                     `<span class="pipeline-stat">Resolved: <strong>${s.resolved_entities}</strong></span>`,
                     `<span class="pipeline-stat">Graph items: <strong>${s.graph_items}</strong></span>`,
@@ -375,6 +376,23 @@ ${rels}</pre></div>`);
                     `<span class="pipeline-stat">Time: <strong>${s.elapsed_ms}ms</strong></span>`,
                 ];
                 sections.push(`<div class="pipeline-section"><h4>Stats</h4><div>${stats.join('')}</div></div>`);
+
+                if (v2g.entities_found && v2g.entities_found.length > 0) {
+                    let v2gHtml = `<div class="pipeline-section"><h4>Vector → Graph Entity Feeding</h4><pre>`;
+                    v2gHtml += `Searched vector DB for: "${esc(meta.query_plan?.type || 'query')}"\n`;
+                    v2gHtml += `Found entities in memories: ${v2g.entities_found.map(e => esc(e)).join(', ')}\n`;
+                    if (v2g.entities_fed && v2g.entities_fed.length > 0) {
+                        v2gHtml += `Fed to graph lookup: ${v2g.entities_fed.map(e => esc(e)).join(', ')}\n`;
+                    }
+                    if (v2g.relationships_found && v2g.relationships_found.length > 0) {
+                        v2gHtml += `Found relationships:\n`;
+                        v2g.relationships_found.forEach(r => {
+                            v2gHtml += `  - ${esc(r.subject)} ${esc(r.predicate)} ${esc(r.object)}\n`;
+                        });
+                    }
+                    v2gHtml += `</pre></div>`;
+                    sections.push(v2gHtml);
+                }
             }
             if (sections.length === 0) return '';
             const id = 'pipe-' + Math.random().toString(36).substr(2, 6);

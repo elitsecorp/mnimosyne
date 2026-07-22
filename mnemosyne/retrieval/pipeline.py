@@ -106,6 +106,7 @@ class ContextPipeline:
         graph_result = None
         entity_scores: dict[str, float] = {}
         all_items: list[ScoredItem] = []
+        vector_to_graph_info = {"entities_found": [], "relationships_found": [], "entities_fed": []}
 
         if plan.graph_enabled and resolved:
             retriever = GraphRetriever(self._graph.graph)
@@ -140,11 +141,13 @@ class ContextPipeline:
 
             if memory_result and memory_result.memories:
                 vector_entities = self._extract_entities_from_memories(memory_result.memories)
+                vector_to_graph_info["entities_found"] = vector_entities
                 if vector_entities and plan.graph_enabled:
                     resolver = EntityResolver(db)
                     vector_resolved = resolver.resolve(" ".join(vector_entities), limit=10)
                     seen_names = {e.name for e in resolved}
                     new_resolved = [e for e in vector_resolved if e.name not in seen_names]
+                    vector_to_graph_info["entities_fed"] = [e.name for e in new_resolved]
                     if new_resolved:
                         resolved.extend(new_resolved)
                         retriever = GraphRetriever(self._graph.graph)
@@ -159,6 +162,10 @@ class ContextPipeline:
                         rel_items = ranker.rank_relationships(extra_result.relationships, plan.detected_entities)
                         all_items.extend(ent_items)
                         all_items.extend(rel_items)
+                        vector_to_graph_info["relationships_found"] = [
+                            {"subject": r["subject"], "predicate": r["predicate"], "object": r["object"]}
+                            for r in extra_result.relationships[:10]
+                        ]
 
         deduped = Deduplicator().dedup(all_items)
         compressed = Compressor(self._token_budget).compress(deduped)
@@ -173,6 +180,7 @@ class ContextPipeline:
             "after_compress": len(compressed),
             "context_chars": len(context),
             "elapsed_ms": round(elapsed * 1000, 1),
+            "vector_to_graph": vector_to_graph_info,
         }
 
         logger.info("Pipeline complete: %s", stats)
