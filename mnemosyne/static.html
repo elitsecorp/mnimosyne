@@ -329,58 +329,88 @@
             const memories = meta.memory_result?.memories || [];
             const graphRels = meta.graph_result?.relationships || [];
             const graphEnts = meta.graph_result?.entities || [];
+            const graphFacts = meta.graph_result?.facts || [];
             const resolved = meta.resolved_entities || [];
             const depth = p.max_hops || 2;
 
             let html = `<div class="pipeline-section"><pre>`;
 
-            html += `<strong>1. User message:</strong> "${esc(userMsg.substring(0, 150))}${userMsg.length > 150 ? '...' : ''}"\n\n`;
+            html += `<strong>1. User message:</strong>\n"${esc(userMsg)}"\n\n`;
 
             html += `<strong>2. Vector search:</strong> Searched embedding DB for similar past messages\n`;
             if (memories.length > 0) {
-                memories.slice(0, 3).forEach((m, i) => {
-                    html += `   ${i + 1}. "${esc(m.text?.substring(0, 80))}${m.text?.length > 80 ? '...' : ''}" (score: ${m.score?.toFixed(3)})\n`;
+                memories.forEach((m, i) => {
+                    html += `   ${i + 1}. "${esc(m.text)}"\n      Score: ${m.score?.toFixed(4)}\n`;
                 });
-                if (memories.length > 3) html += `   ... and ${memories.length - 3} more\n`;
             } else {
                 html += `   No similar memories found\n`;
             }
 
+            html += `\n<strong>3. Entities extracted from vector results:</strong>\n`;
             if (v2g.entities_found && v2g.entities_found.length > 0) {
-                html += `\n<strong>3. Entities extracted from memories:</strong> ${v2g.entities_found.map(e => esc(e)).join(', ')}\n`;
-                html += `   Fed these to graph database at depth ${depth}\n`;
-
-                if (v2g.entities_fed && v2g.entities_fed.length > 0) {
-                    html += `\n<strong>4. Graph lookup found:</strong>\n`;
-                    html += `   Entities: ${v2g.entities_fed.join(', ')}\n`;
-                    if (v2g.relationships_found && v2g.relationships_found.length > 0) {
-                        html += `   Relationships:\n`;
-                        v2g.relationships_found.forEach(r => {
-                            html += `     - ${esc(r.subject)} ${esc(r.predicate)} ${esc(r.object)}\n`;
-                        });
-                    }
-                }
-            } else if (resolved.length > 0) {
-                html += `\n<strong>3. Entities resolved from query:</strong> ${resolved.map(e => esc(e.name)).join(', ')}\n`;
-                html += `   Fed to graph database at depth ${depth}\n`;
-                if (graphRels.length > 0) {
-                    html += `\n<strong>4. Graph found ${graphRels.length} relationships:</strong>\n`;
-                    graphRels.slice(0, 5).forEach(r => {
-                        html += `   - ${esc(r.subject)} ${esc(r.predicate)} ${esc(r.object)}\n`;
-                    });
-                    if (graphRels.length > 5) html += `   ... and ${graphRels.length - 5} more\n`;
-                }
+                html += `   ${v2g.entities_found.map(e => esc(e)).join(', ')}\n`;
+            } else {
+                html += `   None found\n`;
             }
 
-            html += `\n<strong>5. Context assembled at depth ${depth}:</strong>\n`;
-            html += `   - Vector result: ${memories.length} memories\n`;
-            html += `   - Graph result: ${graphEnts.length} entities, ${graphRels.length} relationships\n`;
-            html += `   - Previous thread: ${meta.conversation_length || 0} messages\n`;
+            html += `\n<strong>4. Entities from initial message (via query planner):</strong>\n`;
+            if (p.detected_entities && p.detected_entities.length > 0) {
+                html += `   ${p.detected_entities.map(e => esc(e)).join(', ')}\n`;
+            } else {
+                html += `   None detected\n`;
+            }
+
+            html += `\n<strong>5. All entities fed to graph database:</strong>\n`;
+            if (resolved.length > 0) {
+                html += `   ${resolved.map(e => `${esc(e.name)} (${esc(e.method)}, score: ${e.score?.toFixed(2)})`).join(', ')}\n`;
+                html += `   Depth: ${depth} hops\n`;
+            } else {
+                html += `   None\n`;
+            }
+
+            html += `\n<strong>6. Graph lookup results:</strong>\n`;
+            html += `   Entities found: ${graphEnts.length}\n`;
+            if (graphEnts.length > 0) {
+                graphEnts.forEach(e => {
+                    html += `   - ${esc(e.name)} (type: ${esc(e.type)}, confidence: ${e.confidence?.toFixed(2)})\n`;
+                });
+            }
+            html += `   Relationships found: ${graphRels.length}\n`;
+            if (graphRels.length > 0) {
+                graphRels.forEach(r => {
+                    html += `   - ${esc(r.subject)} ${esc(r.predicate)} ${esc(r.object)} (confidence: ${r.confidence?.toFixed(2)})\n`;
+                });
+            }
+            html += `   Facts found: ${graphFacts.length}\n`;
+            if (graphFacts.length > 0) {
+                graphFacts.forEach(f => {
+                    html += `   - ${esc(f.subject)} ${esc(f.predicate)} ${esc(f.object)}\n`;
+                });
+            }
+
+            html += `\n<strong>7. Vector → Graph entity feeding:</strong>\n`;
+            if (v2g.entities_fed && v2g.entities_fed.length > 0) {
+                html += `   Fed from vector to graph: ${v2g.entities_fed.join(', ')}\n`;
+                if (v2g.relationships_found && v2g.relationships_found.length > 0) {
+                    html += `   Found relationships:\n`;
+                    v2g.relationships_found.forEach(r => {
+                        html += `     - ${esc(r.subject)} ${esc(r.predicate)} ${esc(r.object)}\n`;
+                    });
+                }
+            } else {
+                html += `   No additional entities fed from vector to graph\n`;
+            }
+
+            html += `\n<strong>8. Context assembled:</strong>\n`;
+            html += `   Vector memories: ${memories.length}\n`;
+            html += `   Graph entities: ${graphEnts.length}\n`;
+            html += `   Graph relationships: ${graphRels.length}\n`;
+            html += `   Graph facts: ${graphFacts.length}\n`;
+            html += `   Previous thread: ${meta.conversation_length || 0} messages\n`;
 
             if (meta.context_sent) {
-                const ctxPreview = meta.context_sent.substring(0, 200);
-                html += `\n<strong>6. Context sent to LLM:</strong>\n`;
-                html += `${esc(ctxPreview)}${meta.context_sent.length > 200 ? '...' : ''}\n`;
+                html += `\n<strong>9. Context sent to LLM:</strong>\n`;
+                html += `${esc(meta.context_sent)}\n`;
             }
 
             html += `</pre></div>`;
@@ -389,19 +419,39 @@
                 const e = meta.extraction;
                 if (e.entities.length || e.relationships.length || e.facts.length) {
                     html += `<div class="pipeline-section"><h4>Extracted from response</h4><pre>`;
-                    if (e.entities.length) html += `Entities: ${e.entities.map(x => esc(x.name)).join(', ')}\n`;
-                    if (e.relationships.length) html += `Relationships: ${e.relationships.map(x => `${esc(x.subject)} ${esc(x.predicate)} ${esc(x.object)}`).join('; ')}\n`;
-                    if (e.facts.length) html += `Facts: ${e.facts.map(x => `${esc(x.subject)} ${esc(x.predicate)} ${esc(x.object)}`).join('; ')}\n`;
+                    if (e.entities.length) {
+                        html += `Entities:\n`;
+                        e.entities.forEach(x => {
+                            html += `   - ${esc(x.name)} (type: ${esc(x.type)}, confidence: ${x.confidence?.toFixed(2)})\n`;
+                        });
+                    }
+                    if (e.relationships.length) {
+                        html += `Relationships:\n`;
+                        e.relationships.forEach(x => {
+                            html += `   - ${esc(x.subject)} ${esc(x.predicate)} ${esc(x.object)} (confidence: ${x.confidence?.toFixed(2)})\n`;
+                        });
+                    }
+                    if (e.facts.length) {
+                        html += `Facts:\n`;
+                        e.facts.forEach(x => {
+                            html += `   - ${esc(x.subject)} ${esc(x.predicate)} ${esc(x.object)}\n`;
+                        });
+                    }
                     html += `</pre></div>`;
                 }
             }
 
             if (meta.stats) {
                 const s = meta.stats;
-                html += `<div class="pipeline-section"><div>`;
-                html += `<span class="pipeline-stat">Time: <strong>${s.elapsed_ms}ms</strong></span>`;
-                html += `<span class="pipeline-stat">Context: <strong>${s.context_chars}</strong> chars</span>`;
-                html += `</div></div>`;
+                html += `<div class="pipeline-section"><h4>Stats</h4><pre>`;
+                html += `Resolved entities: ${s.resolved_entities}\n`;
+                html += `Graph items: ${s.graph_items}\n`;
+                html += `Memory items: ${s.memory_items}\n`;
+                html += `After dedup: ${s.after_dedup}\n`;
+                html += `After compress: ${s.after_compress}\n`;
+                html += `Context chars: ${s.context_chars}\n`;
+                html += `Time: ${s.elapsed_ms}ms\n`;
+                html += `</pre></div>`;
             }
 
             if (html === '') return '';

@@ -108,7 +108,12 @@ class ContextPipeline:
         graph_result = None
         entity_scores: dict[str, float] = {}
         all_items: list[ScoredItem] = []
-        vector_to_graph_info = {"entities_found": [], "relationships_found": [], "entities_fed": []}
+        vector_to_graph_info = {
+            "entities_from_message": plan.detected_entities,
+            "entities_from_vector": [],
+            "relationships_found": [],
+            "entities_fed": [],
+        }
 
         if plan.graph_enabled and resolved:
             retriever = GraphRetriever(self._graph.graph)
@@ -143,7 +148,7 @@ class ContextPipeline:
 
             if memory_result and memory_result.memories:
                 vector_entities = self._extract_entities_from_memories(memory_result.memories)
-                vector_to_graph_info["entities_found"] = vector_entities
+                vector_to_graph_info["entities_from_vector"] = vector_entities
                 if vector_entities and plan.graph_enabled:
                     resolver = EntityResolver(db)
                     vector_resolved = resolver.resolve(" ".join(vector_entities), limit=10)
