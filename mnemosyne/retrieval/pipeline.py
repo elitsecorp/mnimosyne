@@ -59,6 +59,23 @@ class ContextPipeline:
         self._token_budget = token_budget
         self._weights = weights
 
+    def _extract_entities_from_memories(self, memories: list[dict]) -> list[str]:
+        """Extract entity names from vector memory results.
+
+        Uses existing graph entities as a vocabulary to identify mentions.
+        """
+        known_entities = set(self._graph.graph.nodes())
+        entity_mentions: dict[str, int] = {}
+
+        for mem in memories:
+            text = mem.get("text", "").lower()
+            for entity in known_entities:
+                if entity.lower() in text:
+                    entity_mentions[entity] = entity_mentions.get(entity, 0) + 1
+
+        sorted_entities = sorted(entity_mentions.items(), key=lambda x: x[1], reverse=True)
+        return [e[0] for e in sorted_entities[:10]]
+
     def run(
         self,
         db: Session,
@@ -120,6 +137,28 @@ class ContextPipeline:
             ranker = Ranker(self._weights)
             mem_items = ranker.rank_memories(memory_result.memories, plan.detected_entities)
             all_items.extend(mem_items)
+
+            if memory_result and memory_result.memories:
+                vector_entities = self._extract_entities_from_memories(memory_result.memories)
+                if vector_entities and plan.graph_enabled:
+                    resolver = EntityResolver(db)
+                    vector_resolved = resolver.resolve(" ".join(vector_entities), limit=10)
+                    seen_names = {e.name for e in resolved}
+                    new_resolved = [e for e in vector_resolved if e.name not in seen_names]
+                    if new_resolved:
+                        resolved.extend(new_resolved)
+                        retriever = GraphRetriever(self._graph.graph)
+                        extra_result = retriever.retrieve(
+                            new_resolved,
+                            max_hops=1,
+                            min_confidence=self._min_confidence,
+                        )
+                        entity_scores.update(extra_result.scores)
+                        ranker = Ranker(self._weights)
+                        ent_items = ranker.rank_entities(extra_result.entities, plan.detected_entities, entity_scores)
+                        rel_items = ranker.rank_relationships(extra_result.relationships, plan.detected_entities)
+                        all_items.extend(ent_items)
+                        all_items.extend(rel_items)
 
         deduped = Deduplicator().dedup(all_items)
         compressed = Compressor(self._token_budget).compress(deduped)

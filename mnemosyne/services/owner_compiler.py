@@ -121,6 +121,9 @@ class OwnerCompiler:
                 is_owner=1,
             ))
 
+        if key == "has_name":
+            self._connect_me_to_name(db, answer.strip())
+
         db.commit()
 
         status = self.get_onboarding_status(db)
@@ -247,6 +250,23 @@ class OwnerCompiler:
         db.commit()
         logger.info("Created Me entity")
         return "Me"
+
+    def _connect_me_to_name(self, db: Session, name: str) -> None:
+        """Connect Me entity to the user's name via is_same_as relationship."""
+        existing = (
+            db.query(Relationship)
+            .filter_by(subject="Me", predicate="is_same_as", object=name)
+            .first()
+        )
+        if not existing:
+            db.add(Relationship(
+                subject="Me",
+                predicate="is_same_as",
+                object=name,
+                confidence=0.95,
+                is_owner=1,
+            ))
+            logger.info("Connected Me to name: %s", name)
 
     def _attach_discussion_concepts(self, db: Session, me_name: str) -> None:
         """Attach concepts discussed in conversations to Me, capped to avoid unbounded growth."""

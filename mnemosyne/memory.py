@@ -361,7 +361,7 @@ class MemoryEngine:
             )
 
             # Categorize relationships
-            identity_fields = {"has_name", "has_role", "has_goal"}
+            identity_fields = {"has_name", "has_role", "has_goal", "is_same_as"}
             work_fields = {"works_on", "works_for", "works_at", "has_project", "has_skill"}
             people_fields = {"knows", "has_friend", "has_pet", "has_colleague"}
             discussion_pred = "discussed"
@@ -373,6 +373,11 @@ class MemoryEngine:
             for key, value in profile.get("profile", {}).items():
                 label = key.replace("_", " ").title()
                 lines.append(f"- {label}: {value}")
+
+            # Name connections (is_same_as)
+            name_items = [r.object for r in me_rels if r.predicate == "is_same_as"]
+            if name_items:
+                lines.append(f"- Also known as: {', '.join(name_items)}")
 
             # Work
             work_items = [r.object for r in me_rels if r.predicate in work_fields]
