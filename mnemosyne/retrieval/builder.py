@@ -29,7 +29,7 @@ class ContextBuilder:
 
             key_terms = extract_key_entities(conversation)
             if key_terms:
-                sections.append("Key terms discussed: " + ", ".join(key_terms[:10]))
+                sections.append("Key terms discussed: " + ", ".join(key_terms))
 
         entities = [i for i in items if i.item_type == "entity"]
         relationships = [i for i in items if i.item_type == "relationship"]
@@ -38,7 +38,7 @@ class ContextBuilder:
 
         if entities:
             lines = []
-            for item in entities[:25]:
+            for item in entities:
                 e = item.item
                 conf = e.get('confidence', 0)
                 lines.append(f"- {e['name']} (type: {e.get('type', 'unknown')}, confidence: {conf:.2f})")
@@ -46,7 +46,7 @@ class ContextBuilder:
 
         if relationships:
             lines = []
-            for item in relationships[:30]:
+            for item in relationships:
                 r = item.item
                 conf = r.get('confidence', 0)
                 last_seen = r.get('last_seen', '')
@@ -64,17 +64,17 @@ class ContextBuilder:
 
         if facts:
             lines = []
-            for item in facts[:20]:
+            for item in facts:
                 f = item.item
                 lines.append(f"- {f['subject']} {f['predicate']} {f['object']}")
             sections.append("Facts:\n" + "\n".join(lines))
 
         if memories:
             lines = []
-            for item in memories[:10]:
+            for item in memories:
                 m = item.item
                 score = m.get("score", 0)
-                text = m.get("text", "")[:400]
+                text = m.get("text", "")
                 lines.append(f"- [score: {score:.2f}] {text}")
             sections.append("Relevant conversations:\n" + "\n".join(lines))
 
