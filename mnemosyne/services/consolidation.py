@@ -185,25 +185,36 @@ class ConsolidationService:
 
     def _apply_merge_relationships(self, db: Session, affected_nodes: list[str], rec: dict) -> None:
         """Merge duplicate relationships, keeping highest confidence."""
-        action = rec["proposed_action"]
         if len(affected_nodes) < 2:
             return
         subject, obj = affected_nodes[0], affected_nodes[1]
-        predicate = rec.get("reason", "").split('"')[1] if '"' in rec.get("reason", "") else ""
 
-        rels = (
-            db.query(Relationship)
-            .filter_by(subject=subject, object=obj)
-            .order_by(Relationship.confidence.desc())
+        from sqlalchemy import func
+        dups = (
+            db.query(
+                Relationship.subject,
+                Relationship.predicate,
+                Relationship.object,
+                func.count(Relationship.id).label("cnt"),
+            )
+            .filter(
+                Relationship.subject == subject,
+                Relationship.object == obj,
+            )
+            .group_by(Relationship.subject, Relationship.predicate, Relationship.object)
+            .having(func.count(Relationship.id) > 1)
             .all()
         )
 
-        seen_predicates = set()
-        for rel in rels:
-            if rel.predicate in seen_predicates:
+        for dup in dups:
+            rels = (
+                db.query(Relationship)
+                .filter_by(subject=dup[0], predicate=dup[1], object=dup[2])
+                .order_by(Relationship.confidence.desc())
+                .all()
+            )
+            for rel in rels[1:]:
                 db.delete(rel)
-            else:
-                seen_predicates.add(rel.predicate)
 
         logger.info("Merged duplicate relationships for %s -> %s", subject, obj)
 

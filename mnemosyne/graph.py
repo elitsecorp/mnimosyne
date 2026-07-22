@@ -163,8 +163,10 @@ class GraphService:
         return results
 
     def save(self, db: Session) -> None:
-        """Persist the current graph state to the database."""
+        """Persist the current graph state to the database, including deletions."""
+        graph_nodes = set()
         for node, attrs in self._graph.nodes(data=True):
+            graph_nodes.add(node)
             existing = db.query(Entity).filter_by(name=node).first()
             if existing:
                 existing.type = attrs.get("type", "entity")
@@ -176,8 +178,11 @@ class GraphService:
                     confidence=attrs.get("confidence", 0),
                 ))
 
+        graph_edges = set()
         for u, v, data in self._graph.edges(data=True):
             predicate = data.get("predicate", "related_to")
+            edge_key = (u, predicate, v)
+            graph_edges.add(edge_key)
             existing = db.query(Relationship).filter_by(
                 subject=u, predicate=predicate, object=v,
             ).first()
@@ -188,6 +193,17 @@ class GraphService:
                     object=v,
                     confidence=data.get("confidence", 0),
                 ))
+
+        all_entities = db.query(Entity).all()
+        for ent in all_entities:
+            if ent.name not in graph_nodes:
+                db.delete(ent)
+
+        all_rels = db.query(Relationship).filter(Relationship.is_owner == 0).all()
+        for rel in all_rels:
+            edge_key = (rel.subject, rel.predicate, rel.object)
+            if edge_key not in graph_edges:
+                db.delete(rel)
 
         db.commit()
 

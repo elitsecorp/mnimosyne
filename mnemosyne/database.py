@@ -97,6 +97,13 @@ def _migrate_add_is_owner(engine) -> None:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE relationships ADD COLUMN is_owner INTEGER DEFAULT 0"))
             logger.info("Migration complete: is_owner added")
+        if "valid_from" not in columns:
+            logger.info("Migrating: adding temporal fields to relationships table")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE relationships ADD COLUMN valid_from DATETIME"))
+                conn.execute(text("ALTER TABLE relationships ADD COLUMN valid_to DATETIME"))
+                conn.execute(text("ALTER TABLE relationships ADD COLUMN last_seen DATETIME DEFAULT CURRENT_TIMESTAMP"))
+            logger.info("Migration complete: temporal fields added")
 
 
 def load_schema_sql() -> str:

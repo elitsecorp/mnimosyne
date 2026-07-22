@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+import re
 
 from mnemosyne.llm import LLMService
 from mnemosyne.prompts import build_extraction_messages
@@ -11,22 +11,35 @@ from mnemosyne.schemas import ExtractionResult, EntitySchema, RelationshipSchema
 
 logger = logging.getLogger(__name__)
 
+_USER_ALIASES = {"me", "user", "owner", "i"}
+
+_VALID_PREDICATES = {
+    "owns", "has", "likes", "dislikes", "works_for", "works_at",
+    "lives_in", "located_in", "knows", "uses", "created", "built",
+    "visited", "belongs_to", "has_goal", "has_project", "has_skill",
+    "has_habit", "has_resource", "speaks", "learning", "interested_in",
+    "believes", "has_pet", "has_friend", "attended", "is_a",
+    "has_name", "has_role", "discussed", "is_interested_in",
+    "sent", "shared", "asked_about", "replied_to",
+}
+
+_PREDICATE_SYNONYMS = {
+    "works_at": "works_for",
+    "employed_by": "works_for",
+    "lives_at": "lives_in",
+    "is_located_in": "located_in",
+    "has_pet": "owns",
+    "has_friend": "knows",
+    "is_interested_in": "interested_in",
+}
+
 
 def extract_memory(
     llm: LLMService,
     user_message: str,
     assistant_response: str,
 ) -> ExtractionResult:
-    """Extract entities, relationships, and facts from a conversation turn.
-
-    Args:
-        llm: LLM service instance.
-        user_message: The user's message.
-        assistant_response: The assistant's response.
-
-    Returns:
-        ExtractionResult with extracted knowledge. Empty on failure.
-    """
+    """Extract entities, relationships, and facts from a conversation turn."""
     messages = build_extraction_messages(user_message, assistant_response)
     raw = llm.chat_json(messages)
 
@@ -37,11 +50,24 @@ def extract_memory(
     return _enforce_fact_coverage(_parse_extraction(raw))
 
 
-def _enforce_fact_coverage(result: ExtractionResult) -> ExtractionResult:
-    """Ensure every relationship has a corresponding fact.
+def _normalize_entity_name(name: str) -> str:
+    """Normalize entity name: strip whitespace, unify user references."""
+    name = name.strip()
+    if name.lower() in _USER_ALIASES:
+        return "Me"
+    return name
 
-    If a relationship exists without a matching fact, auto-generate the fact.
-    """
+
+def _normalize_predicate(predicate: str) -> str:
+    """Normalize a predicate to snake_case and map synonyms."""
+    result = predicate.strip().lower()
+    result = re.sub(r"[^a-z0-9]+", "_", result)
+    result = re.sub(r"_+", "_", result).strip("_")
+    return _PREDICATE_SYNONYMS.get(result, result)
+
+
+def _enforce_fact_coverage(result: ExtractionResult) -> ExtractionResult:
+    """Ensure every relationship has a corresponding fact."""
     existing_facts = {(f.subject.lower(), f.predicate.lower(), f.object.lower()) for f in result.facts}
 
     for rel in result.relationships:
@@ -53,25 +79,22 @@ def _enforce_fact_coverage(result: ExtractionResult) -> ExtractionResult:
                 object=rel.object,
             ))
             existing_facts.add(key)
-            logger.debug("Auto-generated fact for relationship: %s %s %s", rel.subject, rel.predicate, rel.object)
 
     return result
 
 
 def _parse_extraction(data: dict) -> ExtractionResult:
-    """Parse raw JSON dict into ExtractionResult.
-
-    Args:
-        data: Parsed JSON from the LLM.
-
-    Returns:
-        ExtractionResult with validated data.
-    """
+    """Parse raw JSON dict into ExtractionResult."""
     entities = []
+    seen_entity_names = set()
     for item in data.get("entities", []):
         try:
+            name = _normalize_entity_name(str(item["name"]))
+            if not name or name.lower() in seen_entity_names:
+                continue
+            seen_entity_names.add(name.lower())
             entities.append(EntitySchema(
-                name=str(item["name"]).strip(),
+                name=name,
                 type=str(item["type"]).strip().lower(),
                 confidence=float(item.get("confidence", 0.9)),
             ))
@@ -81,10 +104,12 @@ def _parse_extraction(data: dict) -> ExtractionResult:
     relationships = []
     for item in data.get("relationships", []):
         try:
+            subject = _normalize_entity_name(str(item["subject"]))
+            obj = _normalize_entity_name(str(item["object"]))
             relationships.append(RelationshipSchema(
-                subject=str(item["subject"]).strip(),
+                subject=subject,
                 predicate=_normalize_predicate(item["predicate"]),
-                object=str(item["object"]).strip(),
+                object=obj,
                 confidence=float(item.get("confidence", 0.9)),
             ))
         except (KeyError, ValueError, TypeError):
@@ -93,22 +118,19 @@ def _parse_extraction(data: dict) -> ExtractionResult:
     facts = []
     for item in data.get("facts", []):
         try:
+            subject = _normalize_entity_name(str(item["subject"]))
+            obj = _normalize_entity_name(str(item["object"]))
             facts.append(FactSchema(
-                subject=str(item["subject"]).strip(),
+                subject=subject,
                 predicate=_normalize_predicate(item["predicate"]),
-                object=str(item["object"]).strip(),
+                object=obj,
             ))
         except (KeyError, ValueError, TypeError):
             logger.debug("Skipping invalid fact: %s", item)
 
-    return ExtractionResult(entities=entities, relationships=relationships, facts=facts)
+    rel_set = {(r.subject.lower(), r.predicate.lower(), r.object.lower()) for r in relationships}
+    matching_facts = [f for f in facts if (f.subject.lower(), f.predicate.lower(), f.object.lower()) in rel_set]
+    extra_facts = [f for f in facts if (f.subject.lower(), f.predicate.lower(), f.object.lower()) not in rel_set]
+    all_facts = matching_facts + extra_facts if extra_facts else facts
 
-
-def _normalize_predicate(predicate: str) -> str:
-    """Normalize a predicate to snake_case."""
-    return (
-        predicate.strip()
-        .lower()
-        .replace(" ", "_")
-        .replace("-", "_")
-    )
+    return ExtractionResult(entities=entities, relationships=relationships, facts=all_facts)

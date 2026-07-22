@@ -209,22 +209,38 @@ class OwnerCompiler:
         }
 
     def _ensure_me(self, db: Session) -> str:
-        """Find or create the Me entity."""
+        """Find or create the Me entity, renaming User/Owner to Me."""
         me = db.query(Entity).filter_by(name="Me").first()
         if me:
             return "Me"
 
-        user = db.query(Entity).filter_by(name="User").first()
-        if user:
-            user.name = "Me"
-            db.commit()
-            return "Me"
-
-        owner = db.query(Entity).filter_by(name="Owner").first()
-        if owner:
-            owner.name = "Me"
-            db.commit()
-            return "Me"
+        for old_name in ["User", "Owner"]:
+            old = db.query(Entity).filter_by(name=old_name).first()
+            if old:
+                old.name = "Me"
+                rels = (
+                    db.query(Relationship)
+                    .filter((Relationship.subject == old_name) | (Relationship.object == old_name))
+                    .all()
+                )
+                for rel in rels:
+                    if rel.subject == old_name:
+                        rel.subject = "Me"
+                    if rel.object == old_name:
+                        rel.object = "Me"
+                facts = (
+                    db.query(Fact)
+                    .filter((Fact.subject == old_name) | (Fact.object == old_name))
+                    .all()
+                )
+                for fact in facts:
+                    if fact.subject == old_name:
+                        fact.subject = "Me"
+                    if fact.object == old_name:
+                        fact.object = "Me"
+                db.commit()
+                logger.info("Renamed %s to Me", old_name)
+                return "Me"
 
         new_me = Entity(name="Me", type="person", confidence=1.0)
         db.add(new_me)
@@ -233,12 +249,23 @@ class OwnerCompiler:
         return "Me"
 
     def _attach_discussion_concepts(self, db: Session, me_name: str) -> None:
-        """Attach concepts discussed in conversations to Me."""
+        """Attach concepts discussed in conversations to Me, capped to avoid unbounded growth."""
+        existing_count = (
+            db.query(Relationship)
+            .filter(Relationship.subject == me_name, Relationship.predicate == "discussed", Relationship.is_owner == 1)
+            .count()
+        )
+        if existing_count >= 50:
+            return
+
         facts = db.query(Fact).filter(Fact.source_message.isnot(None)).all()
         attached = 0
+        seen_objects = set()
 
         for fact in facts:
             if fact.subject.lower() in _ME_NAMES or fact.object.lower() in _ME_NAMES:
+                continue
+            if fact.subject in seen_objects:
                 continue
 
             has_link = (
@@ -259,6 +286,9 @@ class OwnerCompiler:
                     is_owner=1,
                 ))
                 attached += 1
+                seen_objects.add(fact.subject)
+                if existing_count + attached >= 50:
+                    break
 
         if attached > 0:
             db.commit()
@@ -404,6 +434,7 @@ class OwnerCompiler:
             has_fact = (
                 db.query(Fact)
                 .filter(
+                    Fact.subject == edge.subject,
                     Fact.predicate == edge.predicate,
                     Fact.object == edge.object,
                 )
@@ -411,16 +442,6 @@ class OwnerCompiler:
             )
 
             has_source_rel = (
-                db.query(Relationship)
-                .filter(
-                    Relationship.predicate == edge.predicate,
-                    Relationship.object == edge.object,
-                    Relationship.is_owner == 0,
-                )
-                .first()
-            )
-
-            has_me_rel = (
                 db.query(Relationship)
                 .filter(
                     Relationship.subject == edge.subject,
@@ -431,7 +452,7 @@ class OwnerCompiler:
                 .first()
             )
 
-            if not has_fact and not has_source_rel and not has_me_rel:
+            if not has_fact and not has_source_rel:
                 db.delete(edge)
 
         db.commit()

@@ -74,7 +74,10 @@ class Relationship(Base):
     predicate: Mapped[str] = mapped_column(String(128), nullable=False)
     object: Mapped[str] = mapped_column(String(256), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
-    is_owner: Mapped[bool] = mapped_column(Integer, default=0)
+    is_owner: Mapped[int] = mapped_column(Integer, default=0)
+    valid_from: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    valid_to: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    last_seen: Mapped[datetime.datetime] = mapped_column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC), onupdate=lambda: datetime.datetime.now(datetime.UTC))
 
 
 class Fact(Base):

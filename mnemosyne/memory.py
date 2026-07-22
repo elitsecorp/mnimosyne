@@ -226,6 +226,9 @@ class MemoryEngine:
     def _store_ontology(self, db: Session, extraction, source_message: str = "") -> None:
         """Store extracted entities, relationships, and facts to the database."""
         from mnemosyne.models import Entity, Relationship, Fact as FactModel
+        import datetime
+
+        now = datetime.datetime.now(datetime.UTC)
 
         for ent in extraction.entities:
             existing = db.query(Entity).filter_by(name=ent.name).first()
@@ -247,7 +250,12 @@ class MemoryEngine:
                     predicate=rel.predicate,
                     object=rel.object,
                     confidence=rel.confidence,
+                    valid_from=now,
                 ))
+            else:
+                existing.last_seen = now
+                if rel.confidence > existing.confidence:
+                    existing.confidence = rel.confidence
             self._graph.add_relationship(rel.subject, rel.predicate, rel.object, rel.confidence)
 
         for fact in extraction.facts:
@@ -307,14 +315,14 @@ class MemoryEngine:
             logger.error("Auto-consolidation failed: %s", e)
 
     def _link_to_owner(self, db: Session) -> None:
-        """Attach discussion concepts to the Owner."""
+        """Attach discussion concepts to Me."""
         try:
             from mnemosyne.services.owner_compiler import OwnerCompiler
             compiler = OwnerCompiler()
-            owner_name = compiler._ensure_owner(db)
-            compiler._attach_discussion_concepts(db, owner_name)
+            me_name = compiler._ensure_me(db)
+            compiler._attach_discussion_concepts(db, me_name)
         except Exception as e:
-            logger.debug("Owner linking skipped: %s", e)
+            logger.debug("Me linking skipped: %s", e)
 
     def _get_owner_context(self, db: Session) -> str:
         """Get Me profile context for the LLM prompt."""
