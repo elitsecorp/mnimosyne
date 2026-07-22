@@ -241,7 +241,10 @@
                 return `<li onclick="showEdgeDetail(${r.id})"><span class="rel-pred">${dir} ${r.predicate}</span> ${other} <span style="color:#888;font-size:0.75rem;">(${r.confidence.toFixed(2)})</span></li>`;
             }).join('');
 
-                let evHtml = data.evidence.map(e => `<div class="evidence">${esc(e.content)}</div>`).join('');
+                let evHtml = data.evidence.map(e => {
+                    const date = e.timestamp ? new Date(e.timestamp).toLocaleDateString() : '';
+                    return `<div class="evidence"><span style="color:#53a8ff;font-size:0.7rem;">${date}</span> ${esc(e.content)}</div>`;
+                }).join('');
 
                 sb.innerHTML = `
                     <h3>${esc(data.name)}</h3>
@@ -261,7 +264,10 @@
             const data = await res.json();
             const sb = document.getElementById('sidebar');
 
-                let evHtml = data.evidence.map(e => `<div class="evidence">${esc(e.content)}</div>`).join('');
+                let evHtml = data.evidence.map(e => {
+                    const date = e.timestamp ? new Date(e.timestamp).toLocaleDateString() : '';
+                    return `<div class="evidence"><span style="color:#53a8ff;font-size:0.7rem;">${date}</span> ${esc(e.content)}</div>`;
+                }).join('');
 
                 sb.innerHTML = `
                     <h3>Relationship</h3>
