@@ -109,7 +109,10 @@ class MemoryEngine:
         )
         result = pipeline.run(db, message, conversation, query_vector=user_embedding)
 
-        # 4. Extract vector memories for prompt
+        # 4. Get Owner profile for context
+        owner_context = self._get_owner_context(db)
+
+        # 5. Extract vector memories for prompt
         vector_context = ""
         if result.memory_result and result.memory_result.get("memories"):
             memories = result.memory_result["memories"]
@@ -118,12 +121,13 @@ class MemoryEngine:
                 for m in memories[:10]
             )
 
-        # 5. Build LLM messages with pipeline context
+        # 6. Build LLM messages with pipeline context
         messages = build_chat_messages(
             conversation=conversation,
             vector_memories=vector_context,
             ontology_facts=result.context,
             user_message=message,
+            owner_context=owner_context,
         )
 
         # 6. Call LLM
@@ -312,3 +316,32 @@ class MemoryEngine:
             compiler._attach_discussion_concepts(db, owner_name)
         except Exception as e:
             logger.debug("Owner linking skipped: %s", e)
+
+    def _get_owner_context(self, db: Session) -> str:
+        """Get Owner profile context for the LLM prompt."""
+        try:
+            from mnemosyne.services.owner_compiler import OwnerCompiler
+            compiler = OwnerCompiler()
+            profile = compiler.get_owner_profile(db)
+            if not profile.get("found"):
+                return ""
+
+            lines = ["Owner profile:"]
+            for key, value in profile.get("profile", {}).items():
+                label = key.replace("_", " ").title()
+                lines.append(f"- {label}: {value}")
+
+            owner_rels = (
+                db.query("subject", "predicate", "object")
+                .select_from(__import__("mnemosyne.models", fromlist=["Relationship"]).Relationship)
+                .filter_by(subject="Owner", is_owner=1)
+                .all()
+            )
+            for rel in owner_rels:
+                if rel.predicate not in ["has_name", "has_role", "has_goal", "works_on", "interested_in"]:
+                    lines.append(f"- {rel.predicate.replace('_', ' ')}: {rel.object}")
+
+            return "\n".join(lines) if len(lines) > 1 else ""
+        except Exception as e:
+            logger.debug("Owner context failed: %s", e)
+            return ""

@@ -8,6 +8,11 @@ Your memory system stores two kinds of information:
 1. Relevant past conversations (vector memories)
 2. Structured knowledge about entities and relationships (ontology graph)
 
+IMPORTANT: The user you are talking to is the "Owner" entity in the knowledge graph.
+When the user says "I", "my", "me", they are referring to the Owner.
+When querying the graph, use "Owner" as the subject for user-related information.
+For example: "Owner has_name X", "Owner works_on Y", "Owner likes Z".
+
 Use this information to provide accurate, context-aware responses.
 If the memory context contains relevant information, incorporate it naturally.
 If no relevant memories are found, respond based on your general knowledge.
@@ -55,6 +60,7 @@ def build_chat_messages(
     vector_memories: str,
     ontology_facts: str,
     user_message: str,
+    owner_context: str = "",
 ) -> list[dict[str, str]]:
     """Build the message list for chat completion.
 
@@ -63,11 +69,14 @@ def build_chat_messages(
         vector_memories: Formatted vector search results.
         ontology_facts: Formatted graph/ontology context.
         user_message: The current user message.
+        owner_context: Owner profile information.
 
     Returns:
         List of message dicts for the LLM API.
     """
     context_parts = []
+    if owner_context:
+        context_parts.append(owner_context)
     if vector_memories:
         context_parts.append(f"[Relevant Memories]\n{vector_memories}")
     if ontology_facts:
