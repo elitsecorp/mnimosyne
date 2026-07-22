@@ -334,7 +334,17 @@ class MemoryEngine:
             logger.debug("Me linking skipped: %s", e)
 
     def _get_owner_context(self, db: Session) -> str:
-        """Get Me profile context for the LLM prompt."""
+        """Get Me profile context for the LLM prompt.
+
+        Structured format:
+        Me:
+        - Name: Alice
+        - Role: Software Engineer
+        - Working on: Mnemosyne
+        - Interested in: Knowledge graphs
+        - People: Bob, Carol
+        - Recently discussed: Python, knowledge graphs, SQLite (last 10)
+        """
         try:
             from mnemosyne.services.owner_compiler import OwnerCompiler
             from mnemosyne.models import Relationship as RelModel
@@ -344,20 +354,47 @@ class MemoryEngine:
             if not profile.get("found"):
                 return ""
 
-            lines = ["Me:"]
-            for key, value in profile.get("profile", {}).items():
-                label = key.replace("_", " ").title()
-                lines.append(f"- {label}: {value}")
-
             me_rels = (
                 db.query(RelModel)
                 .filter(RelModel.subject == "Me", RelModel.is_owner == 1)
                 .all()
             )
-            skip_preds = {"has_name", "has_role", "has_goal", "works_on", "interested_in"}
-            for rel in me_rels:
-                if rel.predicate not in skip_preds:
-                    lines.append(f"- {rel.predicate.replace('_', ' ')}: {rel.object}")
+
+            # Categorize relationships
+            identity_fields = {"has_name", "has_role", "has_goal"}
+            work_fields = {"works_on", "works_for", "works_at", "has_project", "has_skill"}
+            people_fields = {"knows", "has_friend", "has_pet", "has_colleague"}
+            discussion_pred = "discussed"
+            interest_fields = {"interested_in", "is_interested_in", "likes", "dislikes"}
+
+            lines = ["Me:"]
+
+            # Identity (from onboarding)
+            for key, value in profile.get("profile", {}).items():
+                label = key.replace("_", " ").title()
+                lines.append(f"- {label}: {value}")
+
+            # Work
+            work_items = [r.object for r in me_rels if r.predicate in work_fields]
+            if work_items:
+                lines.append(f"- Working on: {', '.join(work_items)}")
+
+            # Interests
+            interest_items = [r.object for r in me_rels if r.predicate in interest_fields]
+            if interest_items:
+                lines.append(f"- Interested in: {', '.join(interest_items)}")
+
+            # People
+            people_items = [r.object for r in me_rels if r.predicate in people_fields]
+            if people_items:
+                lines.append(f"- People: {', '.join(people_items)}")
+
+            # Discussions (ordered by last_seen, limit 10)
+            discussions = [r for r in me_rels if r.predicate == discussion_pred]
+            discussions.sort(key=lambda r: r.last_seen or r.valid_from or "", reverse=True)
+            disc_items = [r.object for r in discussions[:10]]
+            if disc_items:
+                lines.append(f"- Recently discussed: {', '.join(disc_items)}")
 
             return "\n".join(lines) if len(lines) > 1 else ""
         except Exception as e:
