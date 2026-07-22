@@ -29,7 +29,7 @@ class GraphService:
         return self._graph
 
     def load_from_db(self, db: Session) -> None:
-        """Populate the graph from database tables."""
+        """Populate the graph from database tables, including temporal fields."""
         self._graph.clear()
 
         entities = db.query(Entity).all()
@@ -44,6 +44,9 @@ class GraphService:
                     rel.object,
                     predicate=rel.predicate,
                     confidence=rel.confidence,
+                    last_seen=rel.last_seen.isoformat() if rel.last_seen else None,
+                    valid_from=rel.valid_from.isoformat() if rel.valid_from else None,
+                    valid_to=rel.valid_to.isoformat() if rel.valid_to else None,
                 )
         logger.info("Graph loaded: %d nodes, %d edges", self._graph.number_of_nodes(), self._graph.number_of_edges())
 
@@ -57,11 +60,11 @@ class GraphService:
         else:
             self._graph.add_node(name, type=entity_type, confidence=confidence)
 
-    def add_relationship(self, subject: str, predicate: str, obj: str, confidence: float = 0.0) -> None:
+    def add_relationship(self, subject: str, predicate: str, obj: str, confidence: float = 0.0, last_seen: str | None = None) -> None:
         """Add a relationship edge between two entities."""
         self.add_entity(subject, "entity", confidence)
         self.add_entity(obj, "entity", confidence)
-        self._graph.add_edge(subject, obj, predicate=predicate, confidence=confidence)
+        self._graph.add_edge(subject, obj, predicate=predicate, confidence=confidence, last_seen=last_seen)
 
     def search_entity(self, name: str) -> list[dict]:
         """Find nodes whose name contains the query string (case-insensitive)."""

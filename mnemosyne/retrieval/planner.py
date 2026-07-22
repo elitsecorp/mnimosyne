@@ -149,10 +149,10 @@ class QueryPlanner:
         if query_type == "entity_lookup":
             return 1
         if query_type == "relationship_query":
-            return 2
+            return 3
         if query_type == "fact_query":
-            return 2
-        return 2
+            return 3
+        return 3
 
     def _needs_vector_search(self, query_type: str, entities: list[str]) -> bool:
         """Determine if vector search should be used."""

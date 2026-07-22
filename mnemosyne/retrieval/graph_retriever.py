@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import networkx as nx
 
@@ -22,8 +23,8 @@ class GraphResult:
 class GraphRetriever:
     """Traverses the knowledge graph from resolved entities.
 
-    Uses BFS with configurable depth. Scores results by distance and confidence.
-    All deterministic — no LLM calls.
+    Uses BFS with configurable depth. Scores results by distance, confidence,
+    and recency (last_seen). All deterministic — no LLM calls.
     """
 
     def __init__(self, graph: nx.DiGraph) -> None:
@@ -34,6 +35,24 @@ class GraphRetriever:
         "message", "asked_about", "asked", "talked_about", "talked",
         "mentioned", "wrote", "posted", "said", "told",
     })
+
+    def _compute_recency_score(self, last_seen: str | None) -> float:
+        """Compute recency score from last_seen timestamp. Returns 0.0-1.0.
+
+        Edges with no timestamp get 0.5 (neutral).
+        Recent edges score higher, decaying over 30 days.
+        """
+        if not last_seen:
+            return 0.5
+        try:
+            ts = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            age_hours = max((now - ts).total_seconds() / 3600, 0)
+            return max(0.0, 1.0 - min(age_hours / 720, 1.0))
+        except (ValueError, TypeError):
+            return 0.5
 
     def retrieve(
         self,
@@ -84,7 +103,7 @@ class GraphRetriever:
         result: GraphResult,
         start_names: set[str] | None = None,
     ) -> None:
-        """BFS from start entity, collecting relationships and scoring by distance."""
+        """BFS from start entity, collecting relationships and scoring by distance and recency."""
         if start_names is None:
             start_names = {start}
         queue: list[tuple[str, int]] = [(start, 0)]
@@ -98,6 +117,7 @@ class GraphRetriever:
             for _, neighbor, data in self._graph.out_edges(node, data=True):
                 pred = data.get("predicate", "related_to")
                 conf = data.get("confidence", 0)
+                last_seen = data.get("last_seen")
                 edge_key = (node, pred, neighbor)
 
                 if edge_key in visited_edges:
@@ -109,7 +129,8 @@ class GraphRetriever:
 
                 visited_edges.add(edge_key)
                 distance = depth + 1
-                edge_score = (1 / distance) * conf
+                recency = self._compute_recency_score(last_seen)
+                edge_score = (1 / distance) * conf * (0.7 + 0.3 * recency)
 
                 result.relationships.append({
                     "subject": node,
@@ -118,6 +139,7 @@ class GraphRetriever:
                     "confidence": conf,
                     "distance": distance,
                     "score": edge_score,
+                    "last_seen": last_seen,
                 })
 
                 entity_scores[neighbor] = max(
@@ -132,6 +154,7 @@ class GraphRetriever:
             for neighbor, _, data in self._graph.in_edges(node, data=True):
                 pred = data.get("predicate", "related_to")
                 conf = data.get("confidence", 0)
+                last_seen = data.get("last_seen")
                 edge_key = (neighbor, pred, node)
 
                 if edge_key in visited_edges:
@@ -143,7 +166,8 @@ class GraphRetriever:
 
                 visited_edges.add(edge_key)
                 distance = depth + 1
-                edge_score = (1 / distance) * conf
+                recency = self._compute_recency_score(last_seen)
+                edge_score = (1 / distance) * conf * (0.7 + 0.3 * recency)
 
                 result.relationships.append({
                     "subject": neighbor,
@@ -152,6 +176,7 @@ class GraphRetriever:
                     "confidence": conf,
                     "distance": distance,
                     "score": edge_score,
+                    "last_seen": last_seen,
                 })
 
                 entity_scores[neighbor] = max(

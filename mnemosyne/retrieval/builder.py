@@ -49,7 +49,17 @@ class ContextBuilder:
             for item in relationships[:30]:
                 r = item.item
                 conf = r.get('confidence', 0)
-                lines.append(f"- {r['subject']} {r['predicate']} {r['object']} (confidence: {conf:.2f})")
+                last_seen = r.get('last_seen', '')
+                if last_seen:
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
+                        date_str = dt.strftime('%Y-%m-%d')
+                        lines.append(f"- {r['subject']} {r['predicate']} {r['object']} (confidence: {conf:.2f}, seen: {date_str})")
+                    except (ValueError, TypeError):
+                        lines.append(f"- {r['subject']} {r['predicate']} {r['object']} (confidence: {conf:.2f})")
+                else:
+                    lines.append(f"- {r['subject']} {r['predicate']} {r['object']} (confidence: {conf:.2f})")
             sections.append("Relationships:\n" + "\n".join(lines))
 
         if facts:
