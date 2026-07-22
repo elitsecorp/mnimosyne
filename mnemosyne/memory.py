@@ -307,12 +307,11 @@ class MemoryEngine:
             logger.error("Auto-consolidation failed: %s", e)
 
     def _link_to_owner(self, db: Session) -> None:
-        """Link messages to Owner and attach discussion concepts."""
+        """Attach discussion concepts to the Owner."""
         try:
             from mnemosyne.services.owner_compiler import OwnerCompiler
             compiler = OwnerCompiler()
             owner_name = compiler._ensure_owner(db)
-            compiler._link_messages_to_owner(db, owner_name)
             compiler._attach_discussion_concepts(db, owner_name)
         except Exception as e:
             logger.debug("Owner linking skipped: %s", e)
@@ -321,6 +320,8 @@ class MemoryEngine:
         """Get Owner profile context for the LLM prompt."""
         try:
             from mnemosyne.services.owner_compiler import OwnerCompiler
+            from mnemosyne.models import Relationship as RelModel
+
             compiler = OwnerCompiler()
             profile = compiler.get_owner_profile(db)
             if not profile.get("found"):
@@ -332,13 +333,13 @@ class MemoryEngine:
                 lines.append(f"- {label}: {value}")
 
             owner_rels = (
-                db.query("subject", "predicate", "object")
-                .select_from(__import__("mnemosyne.models", fromlist=["Relationship"]).Relationship)
-                .filter_by(subject="Owner", is_owner=1)
+                db.query(RelModel)
+                .filter(RelModel.subject == "Owner", RelModel.is_owner == 1)
                 .all()
             )
+            skip_preds = {"has_name", "has_role", "has_goal", "works_on", "interested_in"}
             for rel in owner_rels:
-                if rel.predicate not in ["has_name", "has_role", "has_goal", "works_on", "interested_in"]:
+                if rel.predicate not in skip_preds:
                     lines.append(f"- {rel.predicate.replace('_', ' ')}: {rel.object}")
 
             return "\n".join(lines) if len(lines) > 1 else ""

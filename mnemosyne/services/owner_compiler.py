@@ -197,7 +197,6 @@ class OwnerCompiler:
     def compile(self, db: Session) -> dict:
         """Run the full owner compilation."""
         owner_name = self._ensure_owner(db)
-        self._link_messages_to_owner(db, owner_name)
         self._attach_discussion_concepts(db, owner_name)
         connections = self._find_owner_connections(db, owner_name)
         stored = self._store_owner_connections(db, owner_name, connections)
@@ -226,36 +225,6 @@ class OwnerCompiler:
         db.commit()
         logger.info("Created Owner entity")
         return "Owner"
-
-    def _link_messages_to_owner(self, db: Session, owner_name: str) -> None:
-        """Link all messages to the Owner entity."""
-        messages = db.query(Message).all()
-        linked = 0
-
-        for msg in messages:
-            existing = (
-                db.query(Relationship)
-                .filter_by(
-                    subject=owner_name,
-                    predicate="authored_by",
-                    object=f"message_{msg.id}",
-                    is_owner=1,
-                )
-                .first()
-            )
-            if not existing:
-                db.add(Relationship(
-                    subject=owner_name,
-                    predicate="authored_by",
-                    object=f"message_{msg.id}",
-                    confidence=1.0,
-                    is_owner=1,
-                ))
-                linked += 1
-
-        if linked > 0:
-            db.commit()
-            logger.info("Linked %d messages to Owner", linked)
 
     def _attach_discussion_concepts(self, db: Session, owner_name: str) -> None:
         """Attach concepts discussed in conversations to the Owner."""
