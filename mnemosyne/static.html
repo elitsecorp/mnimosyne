@@ -112,7 +112,7 @@
 
         async function checkOnboarding() {
             try {
-                const res = await fetch('/api/owner/onboarding/status');
+                const res = await fetch('/api/Me/onboarding/status');
                 const data = await res.json();
                 if (data.needs_onboarding) {
                     onboardingQuestions = data.questions.filter(q => !q.answered);
@@ -153,7 +153,7 @@
 
             const q = onboardingQuestions[onboardingIndex];
             try {
-                await fetch('/api/owner/onboarding/answer', {
+                await fetch('/api/Me/onboarding/answer', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key: q.key, answer: answer })

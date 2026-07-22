@@ -55,7 +55,7 @@
                 <input type="text" id="search" placeholder="Search entities...">
                 <button onclick="searchNodes()">Search</button>
                 <button onclick="resetView()">Reset</button>
-                <button onclick="loadOwnerGraph()" style="background:#e94560;color:#fff;">Owner</button>
+                <button onclick="loadMeGraph()" style="background:#e94560;color:#fff;">Me</button>
             </div>
             <div class="filter-bar">
                 <select id="type-filter" onchange="applyFilter()">
@@ -114,12 +114,12 @@
             }
         }
 
-        async function loadOwnerGraph() {
+        async function loadMeGraph() {
             try {
-                const res = await fetch('/api/owner/graph');
+                const res = await fetch('/api/Me/graph');
                 const data = await res.json();
-                if (!data.owner) {
-                    alert('No Owner entity found. Run consolidation first.');
+                if (!data.Me) {
+                    alert('No Me entity found. Run consolidation first.');
                     return;
                 }
                 allNodes = data.nodes;
@@ -133,9 +133,9 @@
 
                 if (cy) cy.destroy();
                 initCytoscape();
-                document.getElementById('stats').textContent = `Owner Graph: ${allNodes.length} nodes, ${allEdges.length} edges`;
+                document.getElementById('stats').textContent = `Me Graph: ${allNodes.length} nodes, ${allEdges.length} edges`;
             } catch (e) {
-                console.error('Failed to load owner graph:', e);
+                console.error('Failed to load Me graph:', e);
             }
         }
 

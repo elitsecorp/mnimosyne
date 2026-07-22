@@ -1,4 +1,4 @@
-"""Owner Graph compiler: identifies the Owner, runs onboarding, and connects concepts."""
+"""Me Graph compiler: identifies Me, runs onboarding, and connects concepts."""
 
 from __future__ import annotations
 
@@ -9,17 +9,17 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from mnemosyne.database import get_session_factory
-from mnemosyne.models import Entity, Fact, Message, Relationship
+from mnemosyne.models import Entity, Fact, Relationship
 
 logger = logging.getLogger(__name__)
 
-_OWNER_NAMES = {"owner", "user", "i", "me", "myself"}
+_ME_NAMES = {"me", "i", "myself", "user", "owner"}
 _POSSESSIVE_PATTERNS = [
     re.compile(r"\bmy\b", re.IGNORECASE),
     re.compile(r"\bi\b", re.IGNORECASE),
     re.compile(r"\bme\b", re.IGNORECASE),
 ]
-_OWNER_PREDICATES = {
+_ME_PREDICATES = {
     "owns", "has", "likes", "dislikes", "works_for", "works_at",
     "lives_in", "located_in", "knows", "uses", "created", "built",
     "visited", "belongs_to", "has_goal", "has_project", "has_skill",
@@ -38,8 +38,8 @@ ONBOARDING_QUESTIONS = [
 
 
 @dataclass
-class OwnerConnection:
-    """A connection from the Owner to another entity."""
+class MeConnection:
+    """A connection from Me to another entity."""
 
     subject: str
     predicate: str
@@ -50,10 +50,10 @@ class OwnerConnection:
 
 
 class OwnerCompiler:
-    """Compiles the Owner-centric subgraph from the global ontology.
+    """Compiles the Me-centric subgraph from the global ontology.
 
-    Identifies the Owner entity, runs onboarding, and creates relationships
-    connecting the Owner to relevant concepts.
+    Identifies the Me entity, runs onboarding, and creates relationships
+    connecting Me to relevant concepts.
     """
 
     def __init__(self) -> None:
@@ -61,8 +61,8 @@ class OwnerCompiler:
 
     def get_onboarding_status(self, db: Session) -> dict:
         """Check if onboarding is needed and return status."""
-        owner = db.query(Entity).filter_by(name="Owner").first()
-        if not owner:
+        me = db.query(Entity).filter_by(name="Me").first()
+        if not me:
             return {"needs_onboarding": True, "completed": 0, "total": len(ONBOARDING_QUESTIONS)}
 
         completed = set()
@@ -70,7 +70,7 @@ class OwnerCompiler:
             has = (
                 db.query(Relationship)
                 .filter(
-                    Relationship.subject == "Owner",
+                    Relationship.subject == "Me",
                     Relationship.predicate == q["predicate"],
                 )
                 .first()
@@ -98,7 +98,7 @@ class OwnerCompiler:
         if not question:
             return {"error": f"Unknown question: {key}"}
 
-        self._ensure_owner(db)
+        self._ensure_me(db)
 
         entity = Entity(name=answer.strip(), type=question["entity_type"], confidence=0.95)
         existing = db.query(Entity).filter_by(name=answer.strip()).first()
@@ -109,12 +109,12 @@ class OwnerCompiler:
 
         existing_rel = (
             db.query(Relationship)
-            .filter_by(subject="Owner", predicate=question["predicate"], object=answer.strip())
+            .filter_by(subject="Me", predicate=question["predicate"], object=answer.strip())
             .first()
         )
         if not existing_rel:
             db.add(Relationship(
-                subject="Owner",
+                subject="Me",
                 predicate=question["predicate"],
                 object=answer.strip(),
                 confidence=0.95,
@@ -133,17 +133,17 @@ class OwnerCompiler:
             "total": status["total"],
         }
 
-    def get_owner_profile(self, db: Session) -> dict:
-        """Get the Owner's full profile."""
-        owner = db.query(Entity).filter_by(name="Owner").first()
-        if not owner:
+    def get_me_profile(self, db: Session) -> dict:
+        """Get Me's full profile."""
+        me = db.query(Entity).filter_by(name="Me").first()
+        if not me:
             return {"found": False, "name": None, "profile": {}}
 
         profile = {}
         for q in ONBOARDING_QUESTIONS:
             rel = (
                 db.query(Relationship)
-                .filter_by(subject="Owner", predicate=q["predicate"])
+                .filter_by(subject="Me", predicate=q["predicate"])
                 .first()
             )
             if rel:
@@ -151,27 +151,27 @@ class OwnerCompiler:
 
         return {
             "found": True,
-            "name": profile.get("has_name", "Owner"),
+            "name": profile.get("has_name", "Me"),
             "profile": profile,
         }
 
-    def get_owner_graph(self, db: Session) -> dict:
-        """Get the Owner subgraph for visualization."""
-        owner = db.query(Entity).filter(Entity.name == "Owner").first()
-        if not owner:
+    def get_me_graph(self, db: Session) -> dict:
+        """Get the Me subgraph for visualization."""
+        me = db.query(Entity).filter(Entity.name == "Me").first()
+        if not me:
             return {"owner": None, "nodes": [], "edges": []}
 
-        owner_rels = (
+        me_rels = (
             db.query(Relationship)
             .filter(Relationship.is_owner == 1)
             .all()
         )
 
-        node_names = {owner.name}
-        nodes = [{"name": owner.name, "type": "person", "confidence": 1.0, "is_owner": True}]
+        node_names = {me.name}
+        nodes = [{"name": me.name, "type": "person", "confidence": 1.0, "is_me": True}]
         edges = []
 
-        for rel in owner_rels:
+        for rel in me_rels:
             node_names.add(rel.object)
             edges.append({
                 "subject": rel.subject,
@@ -181,7 +181,7 @@ class OwnerCompiler:
             })
 
         for name in node_names:
-            if name == owner.name:
+            if name == me.name:
                 continue
             ent = db.query(Entity).filter_by(name=name).first()
             if ent:
@@ -189,56 +189,62 @@ class OwnerCompiler:
                     "name": ent.name,
                     "type": ent.type,
                     "confidence": ent.confidence,
-                    "is_owner": False,
+                    "is_me": False,
                 })
 
-        return {"owner": owner.name, "nodes": nodes, "edges": edges}
+        return {"owner": me.name, "nodes": nodes, "edges": edges}
 
     def compile(self, db: Session) -> dict:
-        """Run the full owner compilation."""
-        owner_name = self._ensure_owner(db)
-        self._attach_discussion_concepts(db, owner_name)
-        connections = self._find_owner_connections(db, owner_name)
-        stored = self._store_owner_connections(db, owner_name, connections)
-        self._cleanup_old_owner_edges(db, owner_name)
+        """Run the full Me compilation."""
+        me_name = self._ensure_me(db)
+        self._attach_discussion_concepts(db, me_name)
+        connections = self._find_me_connections(db, me_name)
+        stored = self._store_me_connections(db, me_name, connections)
+        self._cleanup_old_me_edges(db, me_name)
 
         return {
-            "owner": owner_name,
+            "owner": me_name,
             "connections_found": len(connections),
             "connections_stored": stored,
         }
 
-    def _ensure_owner(self, db: Session) -> str:
-        """Find or create the Owner entity."""
-        owner = db.query(Entity).filter_by(name="Owner").first()
-        if owner:
-            return "Owner"
+    def _ensure_me(self, db: Session) -> str:
+        """Find or create the Me entity."""
+        me = db.query(Entity).filter_by(name="Me").first()
+        if me:
+            return "Me"
 
         user = db.query(Entity).filter_by(name="User").first()
         if user:
-            user.name = "Owner"
+            user.name = "Me"
             db.commit()
-            return "Owner"
+            return "Me"
 
-        new_owner = Entity(name="Owner", type="person", confidence=1.0)
-        db.add(new_owner)
+        owner = db.query(Entity).filter_by(name="Owner").first()
+        if owner:
+            owner.name = "Me"
+            db.commit()
+            return "Me"
+
+        new_me = Entity(name="Me", type="person", confidence=1.0)
+        db.add(new_me)
         db.commit()
-        logger.info("Created Owner entity")
-        return "Owner"
+        logger.info("Created Me entity")
+        return "Me"
 
-    def _attach_discussion_concepts(self, db: Session, owner_name: str) -> None:
-        """Attach concepts discussed in conversations to the Owner."""
+    def _attach_discussion_concepts(self, db: Session, me_name: str) -> None:
+        """Attach concepts discussed in conversations to Me."""
         facts = db.query(Fact).filter(Fact.source_message.isnot(None)).all()
         attached = 0
 
         for fact in facts:
-            if fact.subject.lower() in _OWNER_NAMES or fact.object.lower() in _OWNER_NAMES:
+            if fact.subject.lower() in _ME_NAMES or fact.object.lower() in _ME_NAMES:
                 continue
 
             has_link = (
                 db.query(Relationship)
                 .filter(
-                    Relationship.subject == owner_name,
+                    Relationship.subject == me_name,
                     Relationship.predicate.in_(["discussed", "is_interested_in"]),
                     Relationship.object == fact.subject,
                 )
@@ -246,7 +252,7 @@ class OwnerCompiler:
             )
             if not has_link:
                 db.add(Relationship(
-                    subject=owner_name,
+                    subject=me_name,
                     predicate="discussed",
                     object=fact.subject,
                     confidence=0.6,
@@ -256,21 +262,21 @@ class OwnerCompiler:
 
         if attached > 0:
             db.commit()
-            logger.info("Attached %d discussion concepts to Owner", attached)
+            logger.info("Attached %d discussion concepts to Me", attached)
 
-    def _find_owner_connections(self, db: Session, owner_name: str) -> list[OwnerConnection]:
-        """Scan relationships for owner-relevant connections."""
+    def _find_me_connections(self, db: Session, me_name: str) -> list[MeConnection]:
+        """Scan relationships for Me-relevant connections."""
         connections = []
 
         rels = db.query(Relationship).filter(Relationship.is_owner == 0).all()
 
         for rel in rels:
-            if self._is_owner_relationship(rel, owner_name):
+            if self._is_me_relationship(rel, me_name):
                 evidence = self._get_evidence(db, rel)
-                connections.append(OwnerConnection(
-                    subject=owner_name,
+                connections.append(MeConnection(
+                    subject=me_name,
                     predicate=rel.predicate,
-                    object=rel.object if rel.subject.lower() in _OWNER_NAMES else rel.subject,
+                    object=rel.object if rel.subject.lower() in _ME_NAMES else rel.subject,
                     confidence=rel.confidence,
                     evidence=evidence,
                     source_rel_id=rel.id,
@@ -278,14 +284,14 @@ class OwnerCompiler:
 
         facts = db.query(Fact).filter(Fact.source_message.isnot(None)).all()
         for fact in facts:
-            if self._fact_implies_owner(fact):
+            if self._fact_implies_me(fact):
                 already = any(
                     c.predicate == fact.predicate and c.object.lower() == fact.object.lower()
                     for c in connections
                 )
                 if not already:
-                    connections.append(OwnerConnection(
-                        subject=owner_name,
+                    connections.append(MeConnection(
+                        subject=me_name,
                         predicate=fact.predicate,
                         object=fact.object,
                         confidence=0.7,
@@ -302,24 +308,24 @@ class OwnerCompiler:
 
         return unique
 
-    def _is_owner_relationship(self, rel: Relationship, owner_name: str) -> bool:
-        """Check if a relationship should be connected to the Owner."""
+    def _is_me_relationship(self, rel: Relationship, me_name: str) -> bool:
+        """Check if a relationship should be connected to Me."""
         subject_lower = rel.subject.lower()
 
-        if subject_lower in _OWNER_NAMES:
+        if subject_lower in _ME_NAMES:
             return True
 
-        if rel.predicate.lower() in _OWNER_PREDICATES:
-            if subject_lower == owner_name.lower():
+        if rel.predicate.lower() in _ME_PREDICATES:
+            if subject_lower == me_name.lower():
                 return True
 
-        if rel.subject.lower() == owner_name.lower():
+        if rel.subject.lower() == me_name.lower():
             return True
 
         return False
 
-    def _fact_implies_owner(self, fact: Fact) -> bool:
-        """Check if a fact implies an Owner connection via source message."""
+    def _fact_implies_me(self, fact: Fact) -> bool:
+        """Check if a fact implies a Me connection via source message."""
         if not fact.source_message:
             return False
 
@@ -350,8 +356,8 @@ class OwnerCompiler:
 
         return evidence
 
-    def _store_owner_connections(self, db: Session, owner_name: str, connections: list[OwnerConnection]) -> int:
-        """Store owner connections as marked relationships."""
+    def _store_me_connections(self, db: Session, me_name: str, connections: list[MeConnection]) -> int:
+        """Store Me connections as marked relationships."""
         stored = 0
 
         for conn in connections:
@@ -383,16 +389,16 @@ class OwnerCompiler:
         db.commit()
         return stored
 
-    def _cleanup_old_owner_edges(self, db: Session, owner_name: str) -> None:
-        """Remove owner edges that no longer have supporting evidence."""
-        owner_edges = (
+    def _cleanup_old_me_edges(self, db: Session, me_name: str) -> None:
+        """Remove Me edges that no longer have supporting evidence."""
+        me_edges = (
             db.query(Relationship)
             .filter(Relationship.is_owner == 1)
             .all()
         )
 
-        for edge in owner_edges:
-            if edge.predicate == "authored_by" or edge.predicate == "discussed":
+        for edge in me_edges:
+            if edge.predicate == "discussed":
                 continue
 
             has_fact = (
@@ -414,7 +420,7 @@ class OwnerCompiler:
                 .first()
             )
 
-            has_owner_rel = (
+            has_me_rel = (
                 db.query(Relationship)
                 .filter(
                     Relationship.subject == edge.subject,
@@ -425,7 +431,7 @@ class OwnerCompiler:
                 .first()
             )
 
-            if not has_fact and not has_source_rel and not has_owner_rel:
+            if not has_fact and not has_source_rel and not has_me_rel:
                 db.delete(edge)
 
         db.commit()

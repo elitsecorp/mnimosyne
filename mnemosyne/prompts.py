@@ -8,10 +8,10 @@ Your memory system stores two kinds of information:
 1. Relevant past conversations (vector memories)
 2. Structured knowledge about entities and relationships (ontology graph)
 
-IMPORTANT: The user you are talking to is the "Owner" entity in the knowledge graph.
-When the user says "I", "my", "me", they are referring to the Owner.
-When querying the graph, use "Owner" as the subject for user-related information.
-For example: "Owner has_name X", "Owner works_on Y", "Owner likes Z".
+IMPORTANT: The user you are talking to is the "Me" entity in the knowledge graph.
+When the user says "I", "my", "me", they are referring to Me.
+When querying the graph, use "Me" as the subject for user-related information.
+For example: "Me has_name X", "Me works_on Y", "Me likes Z".
 
 Use this information to provide accurate, context-aware responses.
 If the memory context contains relevant information, incorporate it naturally.

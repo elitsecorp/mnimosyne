@@ -457,44 +457,44 @@ def serve_cytoscape():
     return FileResponse(js_path, media_type="application/javascript")
 
 
-# --- Owner Graph API ---
+# --- Me Graph API ---
 
 
-@app.get("/api/owner/graph")
-def get_owner_graph():
-    """Get the Owner subgraph for visualization."""
+@app.get("/api/me/graph")
+def get_me_graph():
+    """Get the Me subgraph for visualization."""
     from mnemosyne.services.owner_compiler import OwnerCompiler
     from mnemosyne.database import get_session_factory
     db = get_session_factory()()
     try:
         compiler = OwnerCompiler()
-        return compiler.get_owner_graph(db)
+        return compiler.get_me_graph(db)
     finally:
         db.close()
 
 
-@app.get("/api/owner/entity")
-def get_owner_entity():
-    """Get the Owner entity details."""
+@app.get("/api/me/entity")
+def get_me_entity():
+    """Get the Me entity details."""
     from mnemosyne.models import Entity
     from mnemosyne.database import get_session_factory
     db = get_session_factory()()
     try:
-        owner = db.query(Entity).filter(Entity.name == "Owner").first()
-        if not owner:
+        me = db.query(Entity).filter(Entity.name == "Me").first()
+        if not me:
             return {"found": False}
         return {
             "found": True,
-            "id": owner.id,
-            "name": owner.name,
-            "type": owner.type,
-            "confidence": owner.confidence,
+            "id": me.id,
+            "name": me.name,
+            "type": me.type,
+            "confidence": me.confidence,
         }
     finally:
         db.close()
 
 
-@app.get("/api/owner/onboarding/status")
+@app.get("/api/me/onboarding/status")
 def onboarding_status():
     """Check if onboarding is needed."""
     from mnemosyne.services.owner_compiler import OwnerCompiler
@@ -507,7 +507,7 @@ def onboarding_status():
         db.close()
 
 
-@app.post("/api/owner/onboarding/answer")
+@app.post("/api/me/onboarding/answer")
 def onboarding_answer(req: dict):
     """Submit an onboarding answer."""
     from mnemosyne.services.owner_compiler import OwnerCompiler
@@ -524,15 +524,15 @@ def onboarding_answer(req: dict):
         db.close()
 
 
-@app.get("/api/owner/profile")
-def owner_profile():
-    """Get the Owner's full profile."""
+@app.get("/api/me/profile")
+def me_profile():
+    """Get Me's full profile."""
     from mnemosyne.services.owner_compiler import OwnerCompiler
     from mnemosyne.database import get_session_factory
     db = get_session_factory()()
     try:
         compiler = OwnerCompiler()
-        return compiler.get_owner_profile(db)
+        return compiler.get_me_profile(db)
     finally:
         db.close()
 

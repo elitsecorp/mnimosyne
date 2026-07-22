@@ -317,32 +317,32 @@ class MemoryEngine:
             logger.debug("Owner linking skipped: %s", e)
 
     def _get_owner_context(self, db: Session) -> str:
-        """Get Owner profile context for the LLM prompt."""
+        """Get Me profile context for the LLM prompt."""
         try:
             from mnemosyne.services.owner_compiler import OwnerCompiler
             from mnemosyne.models import Relationship as RelModel
 
             compiler = OwnerCompiler()
-            profile = compiler.get_owner_profile(db)
+            profile = compiler.get_me_profile(db)
             if not profile.get("found"):
                 return ""
 
-            lines = ["Owner profile:"]
+            lines = ["Me:"]
             for key, value in profile.get("profile", {}).items():
                 label = key.replace("_", " ").title()
                 lines.append(f"- {label}: {value}")
 
-            owner_rels = (
+            me_rels = (
                 db.query(RelModel)
-                .filter(RelModel.subject == "Owner", RelModel.is_owner == 1)
+                .filter(RelModel.subject == "Me", RelModel.is_owner == 1)
                 .all()
             )
             skip_preds = {"has_name", "has_role", "has_goal", "works_on", "interested_in"}
-            for rel in owner_rels:
+            for rel in me_rels:
                 if rel.predicate not in skip_preds:
                     lines.append(f"- {rel.predicate.replace('_', ' ')}: {rel.object}")
 
             return "\n".join(lines) if len(lines) > 1 else ""
         except Exception as e:
-            logger.debug("Owner context failed: %s", e)
+            logger.debug("Me context failed: %s", e)
             return ""
