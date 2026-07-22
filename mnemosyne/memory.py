@@ -152,7 +152,10 @@ class MemoryEngine:
         # 10. Sync graph to DB
         self._graph.save(db)
 
-        # 11. Auto-consolidation every N prompts
+        # 11. Link messages to Owner and attach discussion concepts
+        self._link_to_owner(db)
+
+        # 12. Auto-consolidation every N prompts
         self._message_count += 1
         if self._message_count % self._auto_consolidate_interval == 0:
             self._auto_consolidate(db)
@@ -298,3 +301,14 @@ class MemoryEngine:
             self._graph.load_from_db(db)
         except Exception as e:
             logger.error("Auto-consolidation failed: %s", e)
+
+    def _link_to_owner(self, db: Session) -> None:
+        """Link messages to Owner and attach discussion concepts."""
+        try:
+            from mnemosyne.services.owner_compiler import OwnerCompiler
+            compiler = OwnerCompiler()
+            owner_name = compiler._ensure_owner(db)
+            compiler._link_messages_to_owner(db, owner_name)
+            compiler._attach_discussion_concepts(db, owner_name)
+        except Exception as e:
+            logger.debug("Owner linking skipped: %s", e)

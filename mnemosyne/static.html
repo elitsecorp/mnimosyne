@@ -91,8 +91,88 @@
             <button id="send-btn" onclick="send()">Send</button>
         </div>
     </div>
+
+    <div id="onboarding-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;display:none;justify-content:center;align-items:center;">
+        <div style="background:#16213e;border:1px solid #0f3460;border-radius:12px;padding:32px;max-width:500px;width:90%;">
+            <h2 style="color:#e94560;margin-bottom:8px;">Welcome to Mnemosyne</h2>
+            <p style="color:#888;margin-bottom:20px;font-size:0.9rem;">Let me get to know you so I can help you better.</p>
+            <div id="onboarding-progress" style="font-size:0.8rem;color:#888;margin-bottom:12px;">Question 1 of 5</div>
+            <div id="onboarding-question" style="font-size:1.1rem;margin-bottom:16px;"></div>
+            <input type="text" id="onboarding-answer" style="width:100%;padding:12px;border-radius:8px;border:1px solid #0f3460;background:#1a1a2e;color:#e0e0e0;font-size:0.95rem;outline:none;margin-bottom:16px;" placeholder="Your answer...">
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button onclick="skipOnboarding()" style="padding:10px 16px;border-radius:6px;border:1px solid #0f3460;background:transparent;color:#888;cursor:pointer;">Skip</button>
+                <button onclick="submitOnboarding()" id="onboarding-next" style="padding:10px 20px;border-radius:6px;border:none;background:#e94560;color:#fff;cursor:pointer;font-weight:600;">Next</button>
+            </div>
+        </div>
+    </div>
     <script>
-        const messagesDiv = document.getElementById('messages');
+        const messagesDiv = document('messages');
+        let onboardingQuestions = [];
+        let onboardingIndex = 0;
+
+        async function checkOnboarding() {
+            try {
+                const res = await fetch('/api/owner/onboarding/status');
+                const data = await res.json();
+                if (data.needs_onboarding) {
+                    onboardingQuestions = data.questions.filter(q => !q.answered);
+                    if (onboardingQuestions.length > 0) {
+                        onboardingIndex = 0;
+                        showOnboardingModal();
+                    }
+                }
+            } catch (e) {
+                console.log('Onboarding check failed:', e);
+            }
+        }
+
+        function showOnboardingModal() {
+            const modal = document.getElementById('onboarding-modal');
+            modal.style.display = 'flex';
+            updateOnboardingQuestion();
+        }
+
+        function updateOnboardingQuestion() {
+            if (onboardingIndex >= onboardingQuestions.length) {
+                hideOnboardingModal();
+                return;
+            }
+            const q = onboardingQuestions[onboardingIndex];
+            document.getElementById('onboarding-question').textContent = q.question;
+            document.getElementById('onboarding-progress').textContent = 
+                `Question ${onboardingIndex + 1} of ${onboardingQuestions.length}`;
+            document.getElementById('onboarding-answer').value = '';
+            document.getElementById('onboarding-answer').focus();
+            document.getElementById('onboarding-next').textContent = 
+                onboardingIndex === onboardingQuestions.length - 1 ? 'Finish' : 'Next';
+        }
+
+        async function submitOnboarding() {
+            const answer = document.getElementById('onboarding-answer').value.trim();
+            if (!answer) return;
+
+            const q = onboardingQuestions[onboardingIndex];
+            try {
+                await fetch('/api/owner/onboarding/answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: q.key, answer: answer })
+                });
+                onboardingIndex++;
+                updateOnboardingQuestion();
+            } catch (e) {
+                alert('Failed to save answer: ' + e.message);
+            }
+        }
+
+        function skipOnboarding() {
+            hideOnboardingModal();
+        }
+
+        function hideOnboardingModal() {
+            document.getElementById('onboarding-modal').style.display = 'none';
+            addMsg('Great! I now know a bit about you. Ask me anything!', 'assistant');
+        }
 
         async function resetDatabase() {
             if (!confirm('This will delete ALL data (messages, entities, relationships, facts). Continue?')) return;
@@ -315,6 +395,7 @@ ${rels}</pre></div>`);
         function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
         loadSessions();
+        checkOnboarding();
     </script>
 </body>
 </html>

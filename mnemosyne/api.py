@@ -494,6 +494,49 @@ def get_owner_entity():
         db.close()
 
 
+@app.get("/api/owner/onboarding/status")
+def onboarding_status():
+    """Check if onboarding is needed."""
+    from mnemosyne.services.owner_compiler import OwnerCompiler
+    from mnemosyne.database import get_session_factory
+    db = get_session_factory()()
+    try:
+        compiler = OwnerCompiler()
+        return compiler.get_onboarding_status(db)
+    finally:
+        db.close()
+
+
+@app.post("/api/owner/onboarding/answer")
+def onboarding_answer(req: dict):
+    """Submit an onboarding answer."""
+    from mnemosyne.services.owner_compiler import OwnerCompiler
+    from mnemosyne.database import get_session_factory
+    key = req.get("key", "")
+    answer = req.get("answer", "")
+    if not key or not answer:
+        raise HTTPException(status_code=400, detail="key and answer required")
+    db = get_session_factory()()
+    try:
+        compiler = OwnerCompiler()
+        return compiler.answer_onboarding(db, key, answer)
+    finally:
+        db.close()
+
+
+@app.get("/api/owner/profile")
+def owner_profile():
+    """Get the Owner's full profile."""
+    from mnemosyne.services.owner_compiler import OwnerCompiler
+    from mnemosyne.database import get_session_factory
+    db = get_session_factory()()
+    try:
+        compiler = OwnerCompiler()
+        return compiler.get_owner_profile(db)
+    finally:
+        db.close()
+
+
 # --- Graph Explorer API ---
 
 
