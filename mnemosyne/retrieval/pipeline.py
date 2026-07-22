@@ -32,6 +32,8 @@ class PipelineResult:
     graph_result: dict | None = None
     memory_result: dict | None = None
     stats: dict = field(default_factory=dict)
+    user_message: str = ""
+    conversation_length: int = 0
 
 
 class ContextPipeline:
@@ -193,4 +195,6 @@ class ContextPipeline:
             graph_result=graph_result.__dict__ if graph_result else None,
             memory_result=memory_result.__dict__ if memory_result else None,
             stats=stats,
+            user_message=query,
+            conversation_length=len(conversation) if conversation else 0,
         )
