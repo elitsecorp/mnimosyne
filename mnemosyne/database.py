@@ -102,7 +102,7 @@ def _migrate_add_is_owner(engine) -> None:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE relationships ADD COLUMN valid_from DATETIME"))
                 conn.execute(text("ALTER TABLE relationships ADD COLUMN valid_to DATETIME"))
-                conn.execute(text("ALTER TABLE relationships ADD COLUMN last_seen DATETIME DEFAULT CURRENT_TIMESTAMP"))
+                conn.execute(text("ALTER TABLE relationships ADD COLUMN last_seen DATETIME"))
             logger.info("Migration complete: temporal fields added")
 
 
