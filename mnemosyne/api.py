@@ -70,7 +70,7 @@ def get_import_service():
 
 @app.on_event("startup")
 def _startup() -> None:
-    """Initialize database and graph on startup."""
+    """Initialize database, graph, and embedding model on startup."""
     from mnemosyne.database import init_db, get_session_factory
     init_db()
     engine = get_engine()
@@ -80,6 +80,8 @@ def _startup() -> None:
         engine._graph.load_from_db(db)
     finally:
         db.close()
+    # Eagerly load the embedding model
+    engine.warmup()
     logger.info("Mnemosyne started successfully.")
 
 
@@ -103,6 +105,17 @@ def memories_page() -> HTMLResponse:
 def health() -> HealthResponse:
     """Health check endpoint."""
     return HealthResponse()
+
+
+@app.get("/api/status")
+def system_status():
+    """Check if the system is ready (embedding model loaded, etc.)."""
+    engine = get_engine()
+    return {
+        "ready": engine.is_ready,
+        "embedding_backend": settings.embedding_backend,
+        "embedding_model": settings.local_embedding_model if settings.embedding_backend == "local" else settings.gemini_embedding_model,
+    }
 
 
 @app.post("/api/database/reset")

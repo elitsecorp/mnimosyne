@@ -41,6 +41,15 @@ class MemoryEngine:
         self._message_count = 0
         self._auto_consolidate_interval = 5
 
+    @property
+    def is_ready(self) -> bool:
+        """Check if the system is ready (embedding model loaded)."""
+        return self._embeddings.is_ready
+
+    def warmup(self) -> None:
+        """Eagerly load the embedding model. Call this on startup."""
+        self._embeddings.warmup()
+
     def chat(self, message: str, session_id: int | None = None) -> dict:
         """Process a user message through the full memory pipeline.
 

@@ -61,6 +61,10 @@
         .typing { display: inline-block; }
         .typing::after { content: ''; animation: blink 1s infinite; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        #loading-banner { display: none; background: #0f3460; border: 1px solid #e94560; border-radius: 8px; padding: 12px 20px; margin: 16px 24px; text-align: center; }
+        #loading-banner.show { display: block; }
+        #loading-banner .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #53a8ff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -83,6 +87,10 @@
                 <a href="#" onclick="resetDatabase()" style="color:#e94560;">Reset DB</a>
             </nav>
         </header>
+        <div id="loading-banner">
+            <span class="spinner"></span>
+            Loading embedding model... (first run downloads ~80MB)
+        </div>
         <div id="messages">
             <div class="msg assistant">Hello! I'm Mnemosyne. I remember our conversations. Ask me anything.</div>
         </div>
@@ -109,6 +117,37 @@
         const messagesDiv = document.getElementById('messages');
         let onboardingQuestions = [];
         let onboardingIndex = 0;
+        let systemReady = false;
+
+        async function checkSystemStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                systemReady = data.ready;
+                if (!systemReady) {
+                    document.getElementById('loading-banner').classList.add('show');
+                    input.disabled = true;
+                    sendBtn.disabled = true;
+                    // Poll until ready
+                    const poll = setInterval(async () => {
+                        try {
+                            const r = await fetch('/api/status');
+                            const d = await r.json();
+                            if (d.ready) {
+                                clearInterval(poll);
+                                systemReady = true;
+                                document.getElementById('loading-banner').classList.remove('show');
+                                input.disabled = false;
+                                sendBtn.disabled = false;
+                                input.focus();
+                            }
+                        } catch (e) {}
+                    }, 1000);
+                }
+            } catch (e) {
+                console.log('Status check failed:', e);
+            }
+        }
 
         async function checkOnboarding() {
             try {
@@ -394,6 +433,7 @@ ${rels}</pre></div>`);
 
         function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
+        checkSystemStatus();
         loadSessions();
         checkOnboarding();
     </script>

@@ -53,15 +53,35 @@ class LocalEmbeddingBackend:
         self._model_name = model_name
         self._model = None
         self._dims = 0
+        self._loading = False
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._model is not None
+
+    @property
+    def is_loading(self) -> bool:
+        return self._loading
 
     def _load_model(self):
-        """Lazy-load the sentence-transformers model."""
-        if self._model is None:
+        """Load the sentence-transformers model (called eagerly on startup)."""
+        if self._model is not None:
+            return
+        if self._loading:
+            return
+        self._loading = True
+        try:
             logger.info("Loading local embedding model: %s", self._model_name)
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer(self._model_name)
             self._dims = self._model.get_embedding_dimension()
             logger.info("Local model loaded: %d dimensions", self._dims)
+        finally:
+            self._loading = False
+
+    def warmup(self) -> None:
+        """Eagerly load the model. Call this on startup."""
+        self._load_model()
 
     def embed(self, text: str) -> list[float]:
         """Generate an embedding for a single text string."""
@@ -132,6 +152,20 @@ class EmbeddingService:
 
         backend_name = type(self._backend).__name__
         logger.info("Embedding backend: %s", backend_name)
+
+    @property
+    def is_ready(self) -> bool:
+        """Check if the embedding backend is ready to use."""
+        if isinstance(self._backend, LocalEmbeddingBackend):
+            return self._backend.is_loaded
+        return True  # Gemini is always ready
+
+    def warmup(self) -> None:
+        """Eagerly load the embedding model. Call this on startup."""
+        if isinstance(self._backend, LocalEmbeddingBackend):
+            logger.info("Warming up local embedding model...")
+            self._backend.warmup()
+            logger.info("Embedding model ready.")
 
     def embed(self, text: str) -> list[float]:
         """Generate an embedding for a single text string."""
