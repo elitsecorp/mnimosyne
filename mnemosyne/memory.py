@@ -171,6 +171,13 @@ class MemoryEngine:
             max_context_chars=self._max_context_length,
         )
 
+        # Extract the actual context that was sent to LLM
+        actual_context_sent = ""
+        if messages and len(messages) > 0:
+            last_msg = messages[-1]["content"]
+            if "Memory Context:\n" in last_msg:
+                actual_context_sent = last_msg.split("Memory Context:\n")[1].split("\n\nUser:")[0]
+
         # 6. Call LLM
         response = self._llm.chat(messages)
 
@@ -232,7 +239,7 @@ class MemoryEngine:
             "memory_result": {
                 "memories": result.memory_result.get("memories", [])[:5] if result.memory_result else [],
             },
-            "context_sent": result.context,
+            "context_sent": actual_context_sent,
             "stats": result.stats,
             "extraction": {
                 "entities": [{"name": e.name, "type": e.type, "confidence": e.confidence} for e in extraction.entities] if extraction else [],
