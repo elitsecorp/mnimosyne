@@ -193,7 +193,7 @@ class TestDeduplicator:
 
 class TestCompressor:
     def test_within_budget(self):
-        comp = Compressor(token_budget=100)
+        comp = Compressor(char_budget=100)
         items = [
             ScoredItem(item={"name": "Max", "type": "animal"}, item_type="entity", score=0.9),
             ScoredItem(item={"subject": "Alice", "predicate": "owns", "object": "Max"}, item_type="relationship", score=0.8),
@@ -202,7 +202,7 @@ class TestCompressor:
         assert len(result) == 2
 
     def test_truncates_over_budget(self):
-        comp = Compressor(token_budget=5)
+        comp = Compressor(char_budget=5)
         items = [
             ScoredItem(item={"name": "Max", "type": "animal"}, item_type="entity", score=0.9),
             ScoredItem(item={"name": "Very Long Entity Name That Takes Many Tokens", "type": "concept"}, item_type="entity", score=0.8),

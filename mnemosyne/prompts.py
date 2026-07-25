@@ -61,6 +61,7 @@ def build_chat_messages(
     ontology_facts: str,
     user_message: str,
     owner_context: str = "",
+    max_context_chars: int = 8000,
 ) -> list[dict[str, str]]:
     """Build the message list for chat completion.
 
@@ -70,6 +71,7 @@ def build_chat_messages(
         ontology_facts: Formatted graph/ontology context.
         user_message: The current user message.
         owner_context: Owner profile information.
+        max_context_chars: Maximum characters for the context block.
 
     Returns:
         List of message dicts for the LLM API.
@@ -82,6 +84,9 @@ def build_chat_messages(
     if ontology_facts:
         context_parts.append(f"[Known Facts]\n{ontology_facts}")
     context_block = "\n\n".join(context_parts) if context_parts else "No relevant memories found."
+
+    if len(context_block) > max_context_chars:
+        context_block = context_block[:max_context_chars] + "\n... [truncated to fit context limit]"
 
     messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}]
 

@@ -51,14 +51,14 @@ class ContextPipeline:
         graph: GraphService,
         max_hops: int = 2,
         min_confidence: float = 0.0,
-        token_budget: int = 4000,
+        char_budget: int = 32000,
         weights: dict[str, float] | None = None,
     ) -> None:
         self._embeddings = embeddings
         self._graph = graph
         self._max_hops = max_hops
         self._min_confidence = min_confidence
-        self._token_budget = token_budget
+        self._char_budget = char_budget
         self._weights = weights
 
     def _extract_entities_from_memories(self, memories: list[dict]) -> list[str]:
@@ -175,7 +175,7 @@ class ContextPipeline:
                         ]
 
         deduped = Deduplicator().dedup(all_items)
-        compressed = Compressor(self._token_budget).compress(deduped)
+        compressed = Compressor(self._char_budget).compress(deduped)
         context = ContextBuilder().build(compressed, plan, conversation)
 
         elapsed = time.time() - start

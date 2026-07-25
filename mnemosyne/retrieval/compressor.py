@@ -4,25 +4,22 @@ from __future__ import annotations
 
 from mnemosyne.retrieval.ranker import ScoredItem
 
-CHARS_PER_TOKEN = 4
-
 
 class Compressor:
-    """Truncates and prioritizes scored items to fit within a token budget."""
+    """Truncates and prioritizes scored items to fit within a character budget."""
 
-    def __init__(self, token_budget: int = 4000) -> None:
-        self._budget = token_budget
+    def __init__(self, char_budget: int = 32000) -> None:
+        self._budget = char_budget
 
     def compress(self, items: list[ScoredItem]) -> list[ScoredItem]:
-        """Keep items within the token budget, prioritizing higher-scored items."""
-        budget_chars = self._budget * CHARS_PER_TOKEN
+        """Keep items within the character budget, prioritizing higher-scored items."""
         used = 0
         result = []
 
         for item in items:
             text = self._item_to_text(item)
             cost = len(text) + 20
-            if used + cost <= budget_chars:
+            if used + cost <= self._budget:
                 result.append(item)
                 used += cost
             else:

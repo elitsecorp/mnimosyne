@@ -145,7 +145,7 @@ class MemoryEngine:
             self._graph,
             max_hops=self._max_graph_depth,
             min_confidence=self._min_confidence,
-            token_budget=self._max_context_length,
+            char_budget=self._max_context_length,
         )
         result = pipeline.run(db, message, conversation, query_vector=user_embedding)
 
@@ -168,6 +168,7 @@ class MemoryEngine:
             ontology_facts=result.context,
             user_message=message,
             owner_context=owner_context,
+            max_context_chars=self._max_context_length,
         )
 
         # 6. Call LLM
