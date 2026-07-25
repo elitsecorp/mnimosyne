@@ -110,6 +110,7 @@ def health() -> HealthResponse:
 @app.get("/api/status")
 def system_status():
     """Check if the system is ready (embedding model loaded, etc.)."""
+    from mnemosyne.config import settings
     engine = get_engine()
     return {
         "ready": engine.is_ready,

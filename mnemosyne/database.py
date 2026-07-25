@@ -113,7 +113,6 @@ def _migrate_add_is_owner(engine) -> None:
 def _migrate_settings(engine) -> None:
     """Create settings table and seed default values."""
     from sqlalchemy import inspect, text
-    from mnemosyne.models import Setting
 
     inspector = inspect(engine)
     if "settings" not in inspector.get_table_names():
@@ -129,6 +128,13 @@ def _migrate_settings(engine) -> None:
                 )
             """))
         logger.info("Migration complete: settings table created")
+    else:
+        columns = [col["name"] for col in inspector.get_columns("settings")]
+        if "updated_at" not in columns:
+            logger.info("Migrating: adding updated_at to settings table")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE settings ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+            logger.info("Migration complete: updated_at added")
 
     factory = get_session_factory()
     db = factory()
@@ -150,8 +156,10 @@ def _migrate_settings(engine) -> None:
         }
         for key, (value, encrypted) in defaults.items():
             if key not in existing:
-                db.execute(text("INSERT INTO settings (key, value, encrypted) VALUES (:key, :value, :encrypted)"),
-                           {"key": key, "value": value, "encrypted": encrypted})
+                db.execute(
+                    text("INSERT INTO settings (key, value, encrypted, updated_at) VALUES (:key, :value, :encrypted, CURRENT_TIMESTAMP)"),
+                    {"key": key, "value": value, "encrypted": encrypted},
+                )
         db.commit()
         logger.info("Settings defaults seeded")
     finally:
