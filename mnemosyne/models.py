@@ -91,3 +91,15 @@ class Fact(Base):
     object: Mapped[str] = mapped_column(String(256), nullable=False)
     source_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
+
+
+class Setting(Base):
+    """Application settings stored in the database."""
+
+    __tablename__ = "settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    encrypted: Mapped[bool] = mapped_column(default=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC), onupdate=lambda: datetime.datetime.now(datetime.UTC))

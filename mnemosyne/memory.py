@@ -39,7 +39,7 @@ class MemoryEngine:
         self._retrieval = retrieval or RetrievalService(self._embeddings, self._graph)
         self._session_factory = get_session_factory()
         self._message_count = 0
-        self._auto_consolidate_interval = 5
+        self._load_config()
 
     @property
     def is_ready(self) -> bool:
@@ -49,6 +49,37 @@ class MemoryEngine:
     def warmup(self) -> None:
         """Eagerly load the embedding model. Call this on startup."""
         self._embeddings.warmup()
+
+    def _load_config(self) -> None:
+        """Load configuration from database."""
+        try:
+            from mnemosyne.services.config_service import ConfigService
+            db = self._session_factory()
+            try:
+                config = ConfigService(db)
+                self._max_context_length = int(config.get("max_context_length", "8000"))
+                self._max_vector_results = int(config.get("max_vector_results", "10"))
+                self._max_entity_extraction = int(config.get("max_entity_extraction", "25"))
+                self._max_graph_depth = int(config.get("max_graph_depth", "3"))
+                self._min_confidence = float(config.get("min_confidence", "0.0"))
+                self._min_similarity = float(config.get("min_similarity", "0.6"))
+                self._auto_consolidate_interval = int(config.get("auto_consolidate_interval", "5"))
+            finally:
+                db.close()
+        except Exception as e:
+            logger.debug("Config load failed, using defaults: %s", e)
+            self._max_context_length = 8000
+            self._max_vector_results = 10
+            self._max_entity_extraction = 25
+            self._max_graph_depth = 3
+            self._min_confidence = 0.0
+            self._min_similarity = 0.6
+            self._auto_consolidate_interval = 5
+
+    def reload_config(self) -> None:
+        """Reload configuration from database (call after settings change)."""
+        self._load_config()
+        logger.info("Configuration reloaded")
 
     def chat(self, message: str, session_id: int | None = None) -> dict:
         """Process a user message through the full memory pipeline.
@@ -112,9 +143,9 @@ class MemoryEngine:
         pipeline = ContextPipeline(
             self._embeddings,
             self._graph,
-            max_hops=2,
-            min_confidence=0.0,
-            token_budget=8000,
+            max_hops=self._max_graph_depth,
+            min_confidence=self._min_confidence,
+            token_budget=self._max_context_length,
         )
         result = pipeline.run(db, message, conversation, query_vector=user_embedding)
 

@@ -680,3 +680,69 @@ def consolidate_apply(req: ApplyRequest):
     svc = ConsolidationService()
     actions = [{"index": a.id, "action": a.action} for a in req.actions]
     return svc.apply_recommendations(actions)
+
+
+# --- Settings API ---
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page() -> HTMLResponse:
+    """Serve the settings UI."""
+    html_path = Path(__file__).parent / "settings.html"
+    resp = HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
+
+
+@app.get("/api/settings")
+def get_settings():
+    """Get all settings (mask API keys for display)."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.services.config_service import ConfigService
+    db = get_session_factory()()
+    try:
+        config = ConfigService(db)
+        return config.get_masked()
+    finally:
+        db.close()
+
+
+@app.put("/api/settings")
+def update_settings(req: dict):
+    """Update settings at runtime."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.services.config_service import ConfigService
+    db = get_session_factory()()
+    try:
+        config = ConfigService(db)
+        config.update_many(req)
+        return {"status": "updated"}
+    finally:
+        db.close()
+
+
+@app.get("/api/settings/providers")
+def get_providers():
+    """Return available providers and their models."""
+    from mnemosyne.llm import PROVIDERS
+    return {"providers": PROVIDERS}
+
+
+@app.post("/api/settings/test")
+def test_llm_connection():
+    """Test the current LLM connection."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.services.config_service import ConfigService
+    from mnemosyne.llm import LLMService
+    db = get_session_factory()()
+    try:
+        config = ConfigService(db)
+        provider = config.get("llm_provider", "gemini")
+        api_key = config.get("llm_api_key", "")
+        model = config.get("llm_model", "gemini-2.0-flash")
+        ollama_url = config.get("ollama_url", "http://localhost:11434")
+        llm = LLMService.from_config(provider, api_key, model, ollama_url)
+        success = llm.test_connection()
+        return {"success": success, "provider": provider, "model": model}
+    finally:
+        db.close()

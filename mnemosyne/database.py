@@ -64,6 +64,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _migrate_add_session_id(engine)
     _migrate_add_is_owner(engine)
+    _migrate_settings(engine)
     logger.info("Database initialized.")
 
 
@@ -107,6 +108,54 @@ def _migrate_add_is_owner(engine) -> None:
             if "last_seen" not in columns:
                 conn.execute(text("ALTER TABLE relationships ADD COLUMN last_seen DATETIME"))
                 logger.info("Added last_seen")
+
+
+def _migrate_settings(engine) -> None:
+    """Create settings table and seed default values."""
+    from sqlalchemy import inspect, text
+    from mnemosyne.models import Setting
+
+    inspector = inspect(engine)
+    if "settings" not in inspector.get_table_names():
+        logger.info("Migrating: creating settings table")
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE settings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key VARCHAR(128) NOT NULL UNIQUE,
+                    value TEXT NOT NULL DEFAULT '',
+                    encrypted BOOLEAN DEFAULT 0,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+        logger.info("Migration complete: settings table created")
+
+    factory = get_session_factory()
+    db = factory()
+    try:
+        existing = {row[0] for row in db.execute(text("SELECT key FROM settings")).fetchall()}
+        defaults = {
+            "llm_provider": ("gemini", False),
+            "llm_api_key": ("", True),
+            "llm_model": ("gemini-2.0-flash", False),
+            "ollama_url": ("http://localhost:11434", False),
+            "max_context_length": ("8000", False),
+            "max_vector_results": ("10", False),
+            "max_entity_extraction": ("25", False),
+            "max_graph_depth": ("3", False),
+            "min_confidence": ("0.0", False),
+            "min_similarity": ("0.6", False),
+            "auto_consolidate_interval": ("5", False),
+            "embedding_backend": ("local", False),
+        }
+        for key, (value, encrypted) in defaults.items():
+            if key not in existing:
+                db.execute(text("INSERT INTO settings (key, value, encrypted) VALUES (:key, :value, :encrypted)"),
+                           {"key": key, "value": value, "encrypted": encrypted})
+        db.commit()
+        logger.info("Settings defaults seeded")
+    finally:
+        db.close()
 
 
 def load_schema_sql() -> str:
