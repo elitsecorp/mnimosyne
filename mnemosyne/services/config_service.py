@@ -106,6 +106,8 @@ class ConfigService:
     def update_many(self, settings: dict) -> None:
         """Update multiple settings at once."""
         for key, value in settings.items():
+            if value == "••••••••" or value == "****":
+                continue
             existing = self._db.execute(
                 text("SELECT encrypted FROM settings WHERE key = :key"),
                 {"key": key},

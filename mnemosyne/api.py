@@ -717,6 +717,9 @@ def update_settings(req: dict):
     try:
         config = ConfigService(db)
         config.update_many(req)
+        global _engine
+        if _engine:
+            _engine.reload_config()
         return {"status": "updated"}
     finally:
         db.close()
