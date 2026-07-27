@@ -750,3 +750,151 @@ def test_llm_connection():
         return {"success": success, "provider": provider, "model": model}
     finally:
         db.close()
+
+
+# --- Recall Optimization API ---
+
+
+@app.get("/optimization", response_class=HTMLResponse)
+def optimization_page() -> HTMLResponse:
+    """Serve the recall optimization UI."""
+    html_path = Path(__file__).parent / "optimization.html"
+    resp = HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
+
+
+@app.post("/api/optimization/seed")
+def seed_memories():
+    """Seed the database with test memories."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.evaluation.seed_memories import MemorySeeder
+    from mnemosyne.embeddings import EmbeddingService
+    from mnemosyne.graph import GraphService
+    from mnemosyne.llm import LLMService
+    db = get_session_factory()()
+    try:
+        seeder = MemorySeeder(LLMService(), EmbeddingService(), GraphService())
+        report = seeder.seed(db)
+        return {
+            "total": report.total,
+            "successful": report.successful,
+            "failed": report.failed,
+            "total_entities": report.total_entities,
+            "total_relationships": report.total_relationships,
+            "total_facts": report.total_facts,
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/optimization/clear")
+def clear_seeded_memories():
+    """Clear all seeded memories."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.evaluation.seed_memories import MemorySeeder
+    from mnemosyne.embeddings import EmbeddingService
+    from mnemosyne.graph import GraphService
+    db = get_session_factory()()
+    try:
+        seeder = MemorySeeder(embeddings=EmbeddingService(), graph=GraphService())
+        seeder.clear_memories(db)
+        return {"status": "cleared"}
+    finally:
+        db.close()
+
+
+@app.post("/api/optimization/test")
+def run_recall_test():
+    """Run recall tests with current configuration."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.evaluation.recall_test import RecallTester
+    from mnemosyne.embeddings import EmbeddingService
+    from mnemosyne.graph import GraphService
+    db = get_session_factory()()
+    try:
+        tester = RecallTester(EmbeddingService(), GraphService())
+        report = tester.run_all(db)
+        return {
+            "total_tests": report.total_tests,
+            "avg_recall": report.avg_recall,
+            "avg_latency_ms": report.avg_latency_ms,
+            "total_context_chars": report.total_context_chars,
+            "results": [
+                {
+                    "query": r.query,
+                    "description": r.description,
+                    "entities_expected": r.entities_expected,
+                    "entities_found": r.entities_found,
+                    "entities_missed": r.entities_missed,
+                    "relationships_expected": r.relationships_expected,
+                    "relationships_found": r.relationships_found,
+                    "recall_at_k": r.recall_at_k,
+                    "context_chars": r.context_chars,
+                    "latency_ms": r.latency_ms,
+                }
+                for r in report.results
+            ],
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/optimization/tune")
+def run_parameter_tuning():
+    """Run full parameter grid search."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.evaluation.tuner import ParameterTuner
+    from mnemosyne.embeddings import EmbeddingService
+    from mnemosyne.graph import GraphService
+    db = get_session_factory()()
+    try:
+        tuner = ParameterTuner(EmbeddingService(), GraphService())
+        report = tuner.tune(db)
+        return {
+            "total_combinations": report.total_combinations,
+            "best_params": report.best_params,
+            "best_recall": report.best_recall,
+            "elapsed_seconds": report.elapsed_seconds,
+            "results": [
+                {
+                    "params": r.params,
+                    "avg_recall": r.avg_recall,
+                    "avg_latency_ms": r.avg_latency_ms,
+                    "total_context_chars": r.total_context_chars,
+                }
+                for r in report.results
+            ],
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/optimization/quick-tune")
+def run_quick_tuning():
+    """Run quick parameter tuning with smaller grid."""
+    from mnemosyne.database import get_session_factory
+    from mnemosyne.evaluation.tuner import ParameterTuner
+    from mnemosyne.embeddings import EmbeddingService
+    from mnemosyne.graph import GraphService
+    db = get_session_factory()()
+    try:
+        tuner = ParameterTuner(EmbeddingService(), GraphService())
+        report = tuner.quick_tune(db)
+        return {
+            "total_combinations": report.total_combinations,
+            "best_params": report.best_params,
+            "best_recall": report.best_recall,
+            "elapsed_seconds": report.elapsed_seconds,
+            "results": [
+                {
+                    "params": r.params,
+                    "avg_recall": r.avg_recall,
+                    "avg_latency_ms": r.avg_latency_ms,
+                    "total_context_chars": r.total_context_chars,
+                }
+                for r in report.results
+            ],
+        }
+    finally:
+        db.close()

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mnemosyne - Recall Optimization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+        header { background: #16213e; padding: 12px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.3rem; color: #e94560; }
+        nav a { color: #888; text-decoration: none; margin-left: 16px; font-size: 0.9rem; padding: 6px 12px; border-radius: 6px; }
+        nav a:hover, nav a.active { color: #e0e0e0; background: #0f3460; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 24px; }
+        .section { background: #16213e; border: 1px solid #0f3460; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        .section h2 { color: #e94560; font-size: 1.1rem; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #0f3460; }
+        .btn { padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+        .btn-primary { background: #e94560; color: #fff; }
+        .btn-primary:hover { background: #c73650; }
+        .btn-secondary { background: #0f3460; color: #e0e0e0; }
+        .btn-secondary:hover { background: #1e3a5f; }
+        .btn:disabled { background: #555; cursor: not-allowed; }
+        .btn-group { display: flex; gap: 12px; margin-bottom: 16px; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+        .stat { background: #1a1a2e; border-radius: 8px; padding: 16px; text-align: center; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: #e94560; }
+        .stat-label { font-size: 0.8rem; color: #888; margin-top: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #0f3460; font-size: 0.85rem; }
+        th { color: #888; font-weight: 600; }
+        .recall-good { color: #22c55e; }
+        .recall-ok { color: #eab308; }
+        .recall-bad { color: #e94560; }
+        .params-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+        .param { background: #1a1a2e; border-radius: 6px; padding: 12px; }
+        .param-name { color: #888; font-size: 0.8rem; }
+        .param-value { color: #e0e0e0; font-size: 1rem; font-weight: 600; }
+        .best-config { background: #0f3460; border: 2px solid #22c55e; border-radius: 8px; padding: 16px; margin-top: 16px; }
+        .best-config h3 { color: #22c55e; margin-bottom: 12px; }
+        .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 0.9rem; z-index: 1000; animation: slideIn 0.3s ease; }
+        .toast.success { background: #22c55e; }
+        .toast.error { background: #e94560; }
+        .toast.info { background: #53a8ff; }
+        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Mnemosyne</h1>
+        <nav>
+            <a href="/">Chat</a>
+            <a href="/memories">Memories</a>
+            <a href="/graph-explorer">Graph</a>
+            <a href="/importer">Import</a>
+            <a href="/consolidate">Consolidate</a>
+            <a href="/settings">Settings</a>
+            <a href="/optimization" class="active">Optimize</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <!-- Phase 1: Seed -->
+        <div class="section">
+            <h2>Phase 1: Seed Test Memories</h2>
+            <p style="color:#888;margin-bottom:12px;">Generate 50 test memories covering entities, relationships, and facts across different domains.</p>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="seed-btn" onclick="seedMemories()">Seed Test Memories</button>
+                <button class="btn btn-secondary" id="clear-btn" onclick="clearMemories()">Clear Seeded Data</button>
+            </div>
+            <div id="seed-result" style="display:none;">
+                <div class="stats">
+                    <div class="stat"><div class="stat-value" id="seed-total">0</div><div class="stat-label">Memories</div></div>
+                    <div class="stat"><div class="stat-value" id="seed-entities">0</div><div class="stat-label">Entities</div></div>
+                    <div class="stat"><div class="stat-value" id="seed-rels">0</div><div class="stat-label">Relationships</div></div>
+                    <div class="stat"><div class="stat-value" id="seed-facts">0</div><div class="stat-label">Facts</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Phase 2: Test Recall -->
+        <div class="section">
+            <h2>Phase 2: Test Current Recall</h2>
+            <p style="color:#888;margin-bottom:12px;">Run recall tests with current configuration. Measures how well the system retrieves relevant memories.</p>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="test-btn" onclick="runRecallTest()">Run Recall Test</button>
+            </div>
+            <div id="test-result" style="display:none;">
+                <div class="stats">
+                    <div class="stat"><div class="stat-value" id="test-recall">0%</div><div class="stat-label">Avg Recall</div></div>
+                    <div class="stat"><div class="stat-value" id="test-latency">0ms</div><div class="stat-label">Avg Latency</div></div>
+                    <div class="stat"><div class="stat-value" id="test-context">0</div><div class="stat-label">Context Chars</div></div>
+                    <div class="stat"><div class="stat-value" id="test-tests">0</div><div class="stat-label">Tests Run</div></div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Query</th>
+                            <th>Description</th>
+                            <th>Recall</th>
+                            <th>Entities</th>
+                            <th>Latency</th>
+                            <th>Context</th>
+                        </tr>
+                    </thead>
+                    <tbody id="test-table"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Phase 3: Tune -->
+        <div class="section">
+            <h2>Phase 3: Parameter Optimization</h2>
+            <p style="color:#888;margin-bottom:12px;">Search for optimal parameter combination. Tests 27 combinations (3 depths × 3 similarities × 3 budgets).</p>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="tune-btn" onclick="runTuning()">Run Optimization</button>
+                <button class="btn btn-secondary" id="quick-btn" onclick="runQuickTune()">Quick Tune (4 combos)</button>
+            </div>
+            <div id="tune-progress" style="display:none;color:#888;margin-bottom:12px;"></div>
+            <div id="tune-result" style="display:none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Depth</th>
+                            <th>Similarity</th>
+                            <th>Budget</th>
+                            <th>Recall</th>
+                            <th>Latency</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tune-table"></tbody>
+                </table>
+                <div class="best-config" id="best-config" style="display:none;">
+                    <h3>Best Configuration</h3>
+                    <div class="params-grid" id="best-params"></div>
+                    <button class="btn btn-primary" onclick="applyBestConfig()">Apply to Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function seedMemories() {
+            const btn = document.getElementById('seed-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Seeding...';
+            try {
+                const res = await fetch('/api/optimization/seed', { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('seed-result').style.display = 'block';
+                document.getElementById('seed-total').textContent = data.successful;
+                document.getElementById('seed-entities').textContent = data.total_entities;
+                document.getElementById('seed-rels').textContent = data.total_relationships;
+                document.getElementById('seed-facts').textContent = data.total_facts;
+                showToast(`Seeded ${data.successful}/${data.total} memories`, 'success');
+            } catch (e) {
+                showToast('Seed failed: ' + e.message, 'error');
+            }
+            btn.disabled = false;
+            btn.textContent = 'Seed Test Memories';
+        }
+
+        async function clearMemories() {
+            if (!confirm('Clear all seeded memories? This keeps your Me entity.')) return;
+            try {
+                await fetch('/api/optimization/clear', { method: 'POST' });
+                document.getElementById('seed-result').style.display = 'none';
+                document.getElementById('test-result').style.display = 'none';
+                document.getElementById('tune-result').style.display = 'none';
+                showToast('Memories cleared', 'success');
+            } catch (e) {
+                showToast('Clear failed: ' + e.message, 'error');
+            }
+        }
+
+        async function runRecallTest() {
+            const btn = document.getElementById('test-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Testing...';
+            try {
+                const res = await fetch('/api/optimization/test', { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('test-result').style.display = 'block';
+                document.getElementById('test-recall').textContent = (data.avg_recall * 100).toFixed(0) + '%';
+                document.getElementById('test-latency').textContent = data.avg_latency_ms.toFixed(0) + 'ms';
+                document.getElementById('test-context').textContent = data.total_context_chars;
+                document.getElementById('test-tests').textContent = data.total_tests;
+
+                const tbody = document.getElementById('test-table');
+                tbody.innerHTML = data.results.map(r => {
+                    const cls = r.recall_at_k >= 0.8 ? 'recall-good' : r.recall_at_k >= 0.5 ? 'recall-ok' : 'recall-bad';
+                    return `<tr>
+                        <td>${esc(r.query)}</td>
+                        <td style="color:#888">${esc(r.description)}</td>
+                        <td class="${cls}">${(r.recall_at_k * 100).toFixed(0)}%</td>
+                        <td>${r.entities_found}/${r.entities_expected}</td>
+                        <td>${r.latency_ms.toFixed(0)}ms</td>
+                        <td>${r.context_chars}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                showToast('Test failed: ' + e.message, 'error');
+            }
+            btn.disabled = false;
+            btn.textContent = 'Run Recall Test';
+        }
+
+        async function runTuning() {
+            await runTune('/api/optimization/tune');
+        }
+
+        async function runQuickTune() {
+            await runTune('/api/optimization/quick-tune');
+        }
+
+        async function runTune(url) {
+            const btn = document.getElementById('tune-btn');
+            const quickBtn = document.getElementById('quick-btn');
+            btn.disabled = true;
+            quickBtn.disabled = true;
+            document.getElementById('tune-progress').style.display = 'block';
+            document.getElementById('tune-progress').innerHTML = '<span class="loading"></span> Running optimization...';
+
+            try {
+                const res = await fetch(url, { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('tune-result').style.display = 'block';
+                document.getElementById('tune-progress').style.display = 'none';
+
+                const tbody = document.getElementById('tune-table');
+                tbody.innerHTML = data.results.map((r, i) => {
+                    const cls = r.avg_recall >= 0.8 ? 'recall-good' : r.avg_recall >= 0.5 ? 'recall-ok' : 'recall-bad';
+                    return `<tr>
+                        <td>${i + 1}</td>
+                        <td>${r.params.max_graph_depth || '-'}</td>
+                        <td>${r.params.min_similarity || '-'}</td>
+                        <td>${r.params.char_budget || '-'}</td>
+                        <td class="${cls}">${(r.avg_recall * 100).toFixed(0)}%</td>
+                        <td>${r.avg_latency_ms.toFixed(0)}ms</td>
+                    </tr>`;
+                }).join('');
+
+                if (data.best_params) {
+                    document.getElementById('best-config').style.display = 'block';
+                    document.getElementById('best-params').innerHTML = Object.entries(data.best_params).map(([k, v]) =>
+                        `<div class="param"><div class="param-name">${k}</div><div class="param-value">${v}</div></div>`
+                    ).join('');
+                }
+
+                showToast(`Optimization complete: ${(data.best_recall * 100).toFixed(0)}% recall`, 'success');
+            } catch (e) {
+                showToast('Tuning failed: ' + e.message, 'error');
+            }
+            btn.disabled = false;
+            quickBtn.disabled = false;
+        }
+
+        async function applyBestConfig() {
+            const config = {
+                max_graph_depth: document.querySelector('#best-params .param:nth-child(1) .param-value').textContent,
+                min_similarity: document.querySelector('#best-params .param:nth-child(2) .param-value').textContent,
+                char_budget: document.querySelector('#best-params .param:nth-child(3) .param-value').textContent,
+            };
+            try {
+                await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config),
+                });
+                showToast('Best config applied to settings', 'success');
+            } catch (e) {
+                showToast('Apply failed: ' + e.message, 'error');
+            }
+        }
+
+        function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+        function showToast(msg, type = 'info') {
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+    </script>
+</body>
+</html>
