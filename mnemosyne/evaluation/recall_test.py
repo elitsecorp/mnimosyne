@@ -191,6 +191,9 @@ class RecallTester:
         tests = tests or RECALL_TESTS
         params = params or {}
 
+        # Ensure graph is loaded from DB
+        self._graph.load_from_db(db)
+
         # Build pipeline with test params
         pipeline = ContextPipeline(
             self._embeddings,
