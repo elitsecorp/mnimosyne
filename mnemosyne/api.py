@@ -121,11 +121,28 @@ def system_status():
 
 @app.post("/api/database/reset")
 def reset_database():
-    """Delete all data from the database."""
-    from mnemosyne.database import get_session_factory
+    """Backup and delete all data from the database."""
+    from mnemosyne.database import get_session_factory, get_engine
     from sqlalchemy import text
+    import shutil
+    from datetime import datetime
 
     try:
+        # Backup current database
+        engine = get_engine()
+        db_path = engine.url.database or "mnemosyne.db"
+        if db_path.startswith("sqlite:///"):
+            db_path = db_path[10:]
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = f"backups/mnemosyne_{timestamp}.db"
+
+        import os
+        os.makedirs("backups", exist_ok=True)
+        if os.path.exists(db_path):
+            shutil.copy2(db_path, backup_path)
+
+        # Clear all data
         db = get_session_factory()()
         try:
             for table in ["embeddings", "facts", "relationships", "entities", "messages", "chat_sessions"]:
@@ -142,7 +159,10 @@ def reset_database():
             finally:
                 db2.close()
 
-        return {"status": "reset", "message": "All data deleted."}
+        return {"status": "reset", "message": f"Database reset. Backup saved to {backup_path}"}
+    except Exception as e:
+        logger.error("Reset failed: %s", e)
+        return {"status": "error", "message": str(e)}
     except Exception as e:
         logger.error("Reset failed: %s", e)
         return {"status": "error", "message": str(e)}
