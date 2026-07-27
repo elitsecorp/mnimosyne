@@ -90,7 +90,57 @@ class EntityResolver:
                     )
 
         results = sorted(candidates.values(), key=lambda r: r.match_score, reverse=True)
+
+        # If no entities resolved, try semantic keyword expansion
+        if not results:
+            results = self._semantic_resolve(query, limit)
+
         return results[:limit]
+
+    def _semantic_resolve(self, query: str, limit: int) -> list[ResolvedEntity]:
+        """Resolve entities by semantic keyword matching against all graph entities.
+
+        Used when direct matching fails (e.g., 'philosophy' -> 'existentialism').
+        """
+        query_tokens = _tokenize(query)
+        noise = _tokenize("the a an is are was were do does did what who where when why how tell about my your i you")
+        keywords = query_tokens - noise
+
+        if not keywords:
+            return []
+
+        results = []
+        for entity in self._entities:
+            if entity.name.lower() in self._NOISE_NAMES or len(entity.name) < 2:
+                continue
+
+            name_tokens = _tokenize(entity.name)
+            # Check if any keyword matches any name token
+            overlap = keywords & name_tokens
+            if overlap:
+                score = len(overlap) / len(keywords) * 0.7
+                results.append(ResolvedEntity(
+                    id=entity.id,
+                    name=entity.name,
+                    type=entity.type,
+                    confidence=entity.confidence,
+                    match_method="semantic_keyword",
+                    match_score=score,
+                ))
+            # Also check substring containment
+            for kw in keywords:
+                if len(kw) >= 3 and kw in entity.name.lower():
+                    results.append(ResolvedEntity(
+                        id=entity.id,
+                        name=entity.name,
+                        type=entity.type,
+                        confidence=entity.confidence,
+                        match_method="semantic_substring",
+                        match_score=0.6,
+                    ))
+                    break
+
+        return sorted(results, key=lambda r: r.match_score, reverse=True)[:limit]
 
     def _score_entity(self, entity: Entity, query_lower: str, query_tokens: set[str]) -> tuple[float, str]:
         """Score how well an entity matches the query. Returns (score, method)."""

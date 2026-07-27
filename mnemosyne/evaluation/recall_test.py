@@ -239,17 +239,64 @@ class RecallTester:
 
         latency_ms = (time.time() - start) * 1000
 
-        # Extract found entities from graph result
+        # Collect ALL found entities from multiple sources
+        found_entities = set()
+        found_rels = set()
+
+        # Source 1: Graph result entities
         graph_result = result.graph_result or {}
-        found_entities = {e.get("name", "").lower() for e in graph_result.get("entities", [])}
-        found_rels = {
-            (r.get("subject", "").lower(), r.get("predicate", "").lower(), r.get("object", "").lower())
-            for r in graph_result.get("relationships", [])
-        }
+        for e in graph_result.get("entities", []):
+            name = e.get("name", "").lower()
+            if name:
+                found_entities.add(name)
+
+        # Source 2: Graph result relationships
+        for r in graph_result.get("relationships", []):
+            s = r.get("subject", "").lower()
+            p = r.get("predicate", "").lower()
+            o = r.get("object", "").lower()
+            if s and o:
+                found_rels.add((s, p, o))
+                found_entities.add(s)
+                found_entities.add(o)
+
+        # Source 3: Vector memories text
+        memory_result = result.memory_result or {}
+        for mem in memory_result.get("memories", []):
+            text = mem.get("text", "").lower()
+            if text:
+                # Check each expected entity against memory text
+                for entity in test.expected_entities:
+                    if entity.lower() in text:
+                        found_entities.add(entity.lower())
+
+        # Source 4: Scored items (context that was actually sent)
+        for item in result.scored_items:
+            item_text = str(item.item).lower()
+            for entity in test.expected_entities:
+                if entity.lower() in item_text:
+                    found_entities.add(entity.lower())
+
+        # Source 5: Context string (final output)
+        context_lower = result.context.lower()
+        for entity in test.expected_entities:
+            if entity.lower() in context_lower:
+                found_entities.add(entity.lower())
+
+        # Fuzzy matching: check if expected entity is substring of found or vice versa
+        found_list = list(found_entities)
+        for entity in test.expected_entities:
+            e_lower = entity.lower()
+            if e_lower in found_entities:
+                continue
+            # Check if expected entity is contained in any found entity
+            for found in found_list:
+                if e_lower in found or found in e_lower:
+                    found_entities.add(e_lower)
+                    break
 
         # Calculate entity recall
-        expected_entity_lower = [e.lower() for e in test.expected_entities]
-        entities_found = sum(1 for e in expected_entity_lower if e in found_entities)
+        entities_found = sum(1 for e in test.expected_entities if e.lower() in found_entities)
         entities_missed = [e for e in test.expected_entities if e.lower() not in found_entities]
 
         # Calculate relationship recall

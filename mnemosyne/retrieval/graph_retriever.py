@@ -31,9 +31,7 @@ class GraphRetriever:
         self._graph = graph
 
     _GENERIC_PREDICATES = frozenset({
-        "sent_message", "interacted_with", "replied_to", "sent", "shared",
-        "message", "asked_about", "asked", "talked_about", "talked",
-        "mentioned", "wrote", "posted", "said", "told",
+        "sent_message", "replied_to", "message",
     })
 
     def _compute_recency_score(self, last_seen: str | None) -> float:

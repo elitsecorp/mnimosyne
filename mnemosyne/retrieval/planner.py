@@ -147,7 +147,7 @@ class QueryPlanner:
     def _determine_hops(self, query_type: str) -> int:
         """Determine graph traversal depth based on query type."""
         if query_type == "entity_lookup":
-            return 1
+            return 2
         if query_type == "relationship_query":
             return 3
         if query_type == "fact_query":

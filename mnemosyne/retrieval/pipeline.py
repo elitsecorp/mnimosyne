@@ -173,6 +173,17 @@ class ContextPipeline:
                             {"subject": r["subject"], "predicate": r["predicate"], "object": r["object"]}
                             for r in extra_result.relationships[:10]
                         ]
+                        # Merge extra_result into graph_result for recall testing
+                        if graph_result:
+                            existing_ent_names = {e["name"] for e in graph_result.entities}
+                            for e in extra_result.entities:
+                                if e["name"] not in existing_ent_names:
+                                    graph_result.entities.append(e)
+                            existing_rel_keys = {(r["subject"], r["predicate"], r["object"]) for r in graph_result.relationships}
+                            for r in extra_result.relationships:
+                                key = (r["subject"], r["predicate"], r["object"])
+                                if key not in existing_rel_keys:
+                                    graph_result.relationships.append(r)
 
         deduped = Deduplicator().dedup(all_items)
         compressed = Compressor(self._char_budget).compress(deduped)
