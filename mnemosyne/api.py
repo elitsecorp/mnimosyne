@@ -150,13 +150,8 @@ def reset_database():
             for table in ["embeddings", "facts", "relationships", "entities", "messages", "chat_sessions"]:
                 db.execute(text(f"DELETE FROM {table}"))
             db.commit()
-    finally:
-        db.close()
-
-
-# --- Public API v2 ---
-from mnemosyne.api_v2 import router as api_v2_router
-app.include_router(api_v2_router)
+        finally:
+            db.close()
 
         global _engine, _import_service
         if _engine:
