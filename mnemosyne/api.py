@@ -127,6 +127,7 @@ def reset_database():
     from mnemosyne.database import get_session_factory, get_engine
     from sqlalchemy import text
     import shutil
+    import os
     from datetime import datetime
 
     try:
@@ -139,7 +140,6 @@ def reset_database():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = f"backups/mnemosyne_{timestamp}.db"
 
-        import os
         os.makedirs("backups", exist_ok=True)
         if os.path.exists(db_path):
             shutil.copy2(db_path, backup_path)
@@ -150,7 +150,7 @@ def reset_database():
             for table in ["embeddings", "facts", "relationships", "entities", "messages", "chat_sessions"]:
                 db.execute(text(f"DELETE FROM {table}"))
             db.commit()
-finally:
+    finally:
         db.close()
 
 
