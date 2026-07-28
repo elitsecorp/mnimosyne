@@ -43,8 +43,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Mnemosyne",
-    description="Persistent memory system for Large Language Models",
+    description="Persistent memory system for Large Language Models. The public API is at /api/v2.",
     version="0.2.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 _engine: MemoryEngine | None = None
@@ -148,8 +150,13 @@ def reset_database():
             for table in ["embeddings", "facts", "relationships", "entities", "messages", "chat_sessions"]:
                 db.execute(text(f"DELETE FROM {table}"))
             db.commit()
-        finally:
-            db.close()
+finally:
+        db.close()
+
+
+# --- Public API v2 ---
+from mnemosyne.api_v2 import router as api_v2_router
+app.include_router(api_v2_router)
 
         global _engine, _import_service
         if _engine:
