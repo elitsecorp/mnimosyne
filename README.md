@@ -1,295 +1,179 @@
 # Mnemosyne
 
-A persistent memory system for Large Language Models. Mnemosyne stores both **semantic** (vector embeddings) and **structured** (knowledge graph) representations of knowledge, enabling LLMs to remember conversations, entities, and relationships across sessions.
+Persistent memory system for Large Language Models. Embed, extract, retrieve, remember.
 
-## What It Does
+Mnemosyne gives any LLM a persistent memory layer. Conversations are stored in SQLite, vector embeddings enable semantic search, and a knowledge graph captures structured facts — entities, relationships, and beliefs — across sessions.
 
-Mnemosyne sits between the user and any OpenAI-compatible LLM. Every conversation is:
-
-1. **Stored** — messages persist in SQLite
-2. **Embedded** — vector representations enable semantic search
-3. **Extracted** — entities, relationships, and facts are pulled into a knowledge graph
-4. **Retrieved** — a deterministic pipeline finds relevant knowledge for each query
-5. **Presented** — structured context is sent to the LLM for language generation
-
-The LLM generates language. Mnemosyne handles memory.
-
-## Architecture
-
-```
-User message
-    │
-    ├──► Query Planner (deterministic)
-    ├──► Entity Resolver (exact, substring, fuzzy match)
-    ├──► Graph Retriever (BFS traversal, ranked)
-    ├──► Memory Retriever (vector search, conditional)
-    ├──► Ranker (6-signal weighted scoring)
-    ├──► Deduplicator
-    ├──► Compressor (token budget)
-    ├──► Context Builder (structured sections)
-    │
-    └──► LLM (language generation only)
-```
-
-### Key Design Decisions
-
-- **Deterministic context generation** — Mnemosyne performs retrieval, ranking, filtering, and context construction. The LLM only generates language.
-- **Dual memory representations** — Vector embeddings for semantic similarity, knowledge graph for structured facts.
-- **Conditional vector search** — Vector search runs for all queries but with quality filters (min_similarity=0.6).
-- **Explainable pipeline** — every response includes a "Show pipeline details" dropdown showing exactly what was retrieved and why.
-- **Owner Graph** — automatically connects concepts to the owner entity for personalized retrieval.
-- **Offline embeddings** — uses sentence-transformers (all-MiniLM-L6-v2) for zero-cost vector search.
-- **OpenIE extraction** — rule-based triple extraction for document ingestion (zero cost).
-
-## Tech Stack
-
-| Component | Technology |
-|---|---|
-| Language | Python 3.12+ |
-| Backend | FastAPI |
-| Database | SQLite (WAL mode) |
-| ORM | SQLAlchemy 2.x |
-| Vector Search | sqlite-vec / FAISS / numpy brute-force |
-| Graph | NetworkX |
-| LLM | Google Gemini (configurable) |
-| Embeddings | sentence-transformers (local) or Gemini |
-| OpenIE | Rule-based regex extraction |
-| Validation | Pydantic |
-| Package Manager | uv |
-
-## Installation
-
-### Prerequisites
-
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager
-
-### Steps
+## Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/elitsecorp/mnimosyne.git
-cd mnemosyne
-
-# Install dependencies (includes local embeddings + spaCy)
-uv sync --extra local
-
-# Install dev dependencies (for running tests)
-uv sync --extra dev
-
-# Configure environment
-cp .env.example .env
+pip install mnemosyne
 ```
 
-Edit `.env` with your settings:
-
-```
-GEMINI_API_KEY=your-gemini-api-key-here
-GEMINI_LLM_MODEL=gemini-3.5-flash
-GEMINI_EMBEDDING_MODEL=gemini-embedding-001
-EMBEDDING_BACKEND=local
-```
-
-### Run
+Or with optional extras:
 
 ```bash
-uv run python main.py
+pip install mnemosyne[local]   # offline embeddings (sentence-transformers + spaCy)
+pip install mnemosyne[vec]     # fast vector search (sqlite-vec)
+pip install mnemosyne[faiss]   # fast vector search (FAISS)
 ```
 
-Server starts at `http://localhost:8000`.
+## Quick Start
 
-### Run Tests
+```python
+from mnemosyne import MemoryEngine
 
-```bash
-uv run python -m pytest tests/ -v
+# Create engine (reads GEMINI_API_KEY from env or .env file)
+engine = MemoryEngine()
+
+# Optional: eagerly load the embedding model
+engine.warmup()
+
+# Chat — stores message, extracts knowledge, retrieves context, calls LLM
+result = engine.chat("I just started a new project called Atlas at work.")
+print(result["response"])
+
+# The memory system now knows about "Atlas" and your work context
+result = engine.chat("What project am I working on?")
+print(result["response"])  # -> "You mentioned starting a new project called Atlas at work."
 ```
 
-### Run Evaluation
+## How It Works
 
-```bash
-uv run python -m mnemosyne.evaluation.run_eval
-```
+Every call to `engine.chat()` runs a full pipeline:
 
-## Usage
-
-### Chat
-
-Open `http://localhost:8000` in your browser. Type a message and Mnemosyne will:
-
-1. Store your message
-2. Retrieve relevant memories from the knowledge graph and vector store
-3. Build structured context
-4. Send it to the LLM
-5. Extract new entities, relationships, and facts from the response
-6. Store them in the graph for future queries
-
-Every response includes a **"Show pipeline details"** button that reveals exactly what was retrieved, ranked, and sent to the LLM.
-
-### Chat Sessions
-
-- Create new sessions with **+ New Chat**
-- Switch between sessions by clicking on them
-- Delete sessions with the **x** button
-- All conversations are stored in the memory system regardless of session
-
-### Memory Explorer
-
-Open `http://localhost:8000/memories` to browse all stored data:
-
-- **Entities** — named things (people, places, organizations)
-- **Relationships** — how entities relate (subject → predicate → object)
-- **Facts** — atomic statements with source messages
-- **Messages** — full conversation history
-
-### Knowledge Graph
-
-Open `http://localhost:8000/graph-explorer` for an interactive graph visualization powered by Cytoscape.js:
-
-- Zoom, pan, drag nodes
-- Click nodes to see details and connected relationships
-- Double-click to expand neighbors (lazy loading)
-- Search entities by name
-- Filter by entity type, confidence, and date
-- **Owner** button to view the owner-centric subgraph
-
-### Data Import
-
-Open `http://localhost:8000/importer` to import external text:
-
-- Paste text, markdown, or conversation transcripts
-- Upload .txt or .md files
-- Text is chunked and embedded (zero cost with local embeddings)
-- Progress bar shows chunks processed, entities, relationships, embeddings
-
-### Memory Consolidator
-
-Open `http://localhost:8000/consolidate` to improve graph quality:
-
-- **Duplicate entity detection** — find and merge similar entities
-- **Relationship normalization** — merge synonymous predicates
-- **Orphan detection** — find entities with no relationships
-- **Unsupported relationships** — find relationships without evidence
-- **Confidence recalculation** — update scores based on evidence
-- **Owner connections** — automatically link concepts to the owner
-
-All changes are advisory — review and approve before applying. Auto-consolidation runs every 5 prompts.
-
-### Reset Database
-
-Click **Reset DB** in the nav bar on any page to delete all data and start fresh.
-
-## API Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/` | Chat UI |
-| `GET` | `/memories` | Memory explorer |
-| `GET` | `/graph-explorer` | Knowledge graph |
-| `GET` | `/importer` | Data import |
-| `GET` | `/consolidate` | Memory consolidation |
-| `GET` | `/health` | Health check |
-| `POST` | `/chat` | Send a message |
-| `POST` | `/search` | Vector similarity search |
-| `POST` | `/api/database/reset` | Delete all data |
-| `POST` | `/api/sessions` | Create session |
-| `GET` | `/api/sessions` | List sessions |
-| `DELETE` | `/api/sessions/{id}` | Delete session |
-| `GET` | `/api/entities` | List all entities |
-| `GET` | `/api/relationships` | List all relationships |
-| `GET` | `/api/facts` | List all facts |
-| `GET` | `/api/messages` | List all messages |
-| `GET` | `/api/stats` | Summary counts |
-| `GET` | `/api/graph/seed` | Graph seed for Cytoscape |
-| `GET` | `/api/graph/search?q=` | Search entities |
-| `GET` | `/api/graph/node/{id}` | Node detail |
-| `GET` | `/api/graph/neighbors/{id}` | Lazy expansion |
-| `GET` | `/api/owner/graph` | Owner subgraph |
-| `POST` | `/api/import/text` | Import text |
-| `POST` | `/api/import/file` | Import file |
-| `GET` | `/api/import/job/{id}` | Import progress |
-| `POST` | `/api/consolidate/analyze` | Run consolidation |
-| `POST` | `/api/consolidate/apply` | Apply recommendations |
-
-## Project Structure
-
-```
-mnemosyne/
-├── main.py                    # Entry point
-├── pyproject.toml             # Project config
-├── .env.example               # Environment template
-├── mnemosyne/
-│   ├── __init__.py
-│   ├── config.py              # Settings from environment
-│   ├── database.py            # SQLAlchemy engine + sessions
-│   ├── models.py              # ORM models (6 tables)
-│   ├── schemas.py             # Pydantic validation
-│   ├── llm.py                 # Gemini LLM client
-│   ├── embeddings.py          # Embedding service + vector search
-│   ├── graph.py               # NetworkX knowledge graph
-│   ├── extraction.py          # Knowledge extraction from LLM
-│   ├── prompts.py             # Prompt templates
-│   ├── memory.py              # Memory engine (orchestrator)
-│   ├── api.py                 # FastAPI routes
-│   ├── static.html            # Chat UI
-│   ├── memories.html          # Memory explorer UI
-│   ├── graph_explorer.html    # Knowledge graph UI
-│   ├── importer.html          # Data import UI
-│   ├── consolidator.html      # Memory consolidation UI
-│   ├── static/
-│   │   └── cytoscape.min.js   # Cytoscape.js library
-│   ├── retrieval/             # Deterministic context pipeline
-│   │   ├── planner.py         # Query analysis
-│   │   ├── resolver.py        # Entity resolution
-│   │   ├── graph_retriever.py # Graph traversal
-│   │   ├── memory_retriever.py# Vector search
-│   │   ├── ranker.py          # Multi-signal scoring
-│   │   ├── deduplicator.py    # Deduplication
-│   │   ├── compressor.py      # Token budget
-│   │   ├── builder.py         # Context construction
-│   │   ├── pipeline.py        # Pipeline orchestrator
-│   │   ├── summarizer.py      # Offline text summarization
-│   │   └── wrapper.py         # Backward-compatible interface
-│   ├── services/
-│   │   ├── graph_explorer.py  # Graph exploration
-│   │   ├── importer.py        # Text ingestion
-│   │   ├── consolidation.py   # Memory consolidation
-│   │   ├── owner_compiler.py  # Owner graph compilation
-│   │   └── openie.py          # Rule-based triple extraction
-│   └── evaluation/
-│       ├── harness.py         # Evaluation framework
-│       ├── run_eval.py        # Evaluation runner
-│       └── test_cases.json    # Test cases
-└── tests/
-    ├── test_memory.py
-    ├── test_consolidation.py
-    ├── test_importer.py
-    ├── test_pipeline.py
-    ├── test_owner.py
-    └── test_openie.py
-```
+1. **Store** — your message is saved to SQLite
+2. **Embed** — a vector representation is computed and stored
+3. **Retrieve** — a deterministic pipeline finds relevant knowledge:
+   - Query planning (classify intent, detect entities)
+   - Entity resolution (exact, substring, fuzzy matching)
+   - Graph traversal (BFS over the knowledge graph)
+   - Vector search (cosine similarity over embeddings)
+   - Ranking (6-signal weighted scoring)
+   - Deduplication, compression, context assembly
+4. **Generate** — the LLM responds with structured memory context
+5. **Extract** — entities, relationships, and facts are pulled from the exchange
+6. **Store ontology** — new knowledge is added to the graph and database
 
 ## Configuration
+
+Set via environment variables or a `.env` file:
 
 | Variable | Default | Description |
 |---|---|---|
 | `GEMINI_API_KEY` | — | Your Gemini API key |
-| `GEMINI_LLM_MODEL` | `gemini-3.5-flash` | Chat model |
+| `GEMINI_LLM_MODEL` | `gemini-2.0-flash` | Chat model |
 | `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001` | Embedding model |
-| `EMBEDDING_BACKEND` | `local` | `local` or `gemini` |
+| `EMBEDDING_BACKEND` | `local` | `local` (sentence-transformers) or `gemini` (API) |
 | `LOCAL_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Local embedding model |
 | `DATABASE_URL` | `sqlite:///mnemosyne.db` | Database path |
 | `VEC_TOP_K` | `10` | Default vector search results |
 
-## Database Schema
+## API Reference
 
-| Table | Description |
+### `MemoryEngine`
+
+The main orchestrator. Coordinates storage, embedding, retrieval, LLM calls, and knowledge extraction.
+
+```python
+engine = MemoryEngine(
+    embeddings=EmbeddingService(),  # optional custom embedding backend
+    graph=GraphService(),           # optional custom graph backend
+    llm=LLMService(),              # optional custom LLM backend
+    retrieval=RetrievalService(),   # optional custom retrieval pipeline
+)
+```
+
+**Methods:**
+
+| Method | Returns | Description |
+|---|---|---|
+| `chat(message, session_id=None)` | `dict` | Process message through full pipeline. Returns `{"response", "pipeline", "session_id"}` |
+| `search_memory(query, top_k=10)` | `list[dict]` | Vector similarity search over stored messages |
+| `search_graph(entity_name)` | `dict` | Search knowledge graph for entity and its neighborhood |
+| `get_neighbors(entity, hops=1)` | `dict` | BFS traversal from entity in knowledge graph |
+| `warmup()` | `None` | Eagerly load the embedding model |
+| `reload_config()` | `None` | Reload configuration from database |
+| `is_ready` | `bool` | Whether the embedding model is loaded |
+
+### `EmbeddingService`
+
+Vector embedding and search.
+
+```python
+from mnemosyne import EmbeddingService
+
+emb = EmbeddingService()
+emb.warmup()
+
+vector = emb.embed("hello world")           # -> list[float]
+vectors = emb.embed_batch(["a", "b"])       # -> list[list[float]]
+results = emb.search(db, "hello", top_k=5)  # -> list[dict]
+```
+
+### `GraphService`
+
+NetworkX-based knowledge graph.
+
+```python
+from mnemosyne import GraphService
+
+graph = GraphService()
+graph.load_from_db(db)
+
+graph.add_entity("Alice", "PERSON", confidence=0.9)
+graph.add_relationship("Alice", "works_for", "Acme Corp", confidence=0.8)
+
+neighbors = graph.get_neighbors("Alice", hops=2)
+search = graph.search_entity("Ali")  # substring match
+```
+
+### `LLMService`
+
+LLM provider abstraction (Gemini, OpenAI, DeepSeek, Grok, Kimi, Ollama).
+
+```python
+from mnemosyne import LLMService
+
+llm = LLMService()
+response = llm.chat([{"role": "user", "content": "Hello"}])
+structured = llm.chat_json([{"role": "user", "content": "Extract entities"}])
+```
+
+### `ContextPipeline`
+
+Deterministic retrieval pipeline (no LLM calls).
+
+```python
+from mnemosyne import ContextPipeline
+
+pipeline = ContextPipeline(embeddings, graph, max_hops=3, char_budget=8000)
+result = pipeline.run(db, query, conversation, query_vector=vector)
+# result.plan, result.resolved_entities, result.graph_result, result.memory_result, result.context
+```
+
+## Database
+
+Mnemosyne uses SQLite with WAL mode. Seven tables:
+
+| Table | Purpose |
 |---|---|
-| `chat_sessions` | Chat sessions (title, timestamps) |
-| `messages` | Conversation messages (role, content, session, timestamp) |
-| `embeddings` | Vector embeddings linked to messages |
+| `chat_sessions` | Conversation sessions |
+| `messages` | Messages (role, content, timestamp) |
+| `embeddings` | Vector embeddings (binary-packed float32) |
 | `entities` | Named entities (name, type, confidence) |
-| `relationships` | Entity relationships (subject, predicate, object, is_owner) |
+| `relationships` | Subject-predicate-object triples |
 | `facts` | Atomic facts with source messages |
+| `settings` | Runtime configuration |
+
+## Development
+
+```bash
+git clone https://github.com/elitsecorp/mnemosyne.git
+cd mnemosyne
+uv sync --extra dev
+uv run pytest tests/ -v
+```
 
 ## License
 
